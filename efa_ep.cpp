@@ -58,6 +58,10 @@ int EFAEndpoint::init_res() {
   err = fi_cq_open(domain, &rxcq_attr, &rxcq, NULL);
   if (err < 0)
     std::cerr << "fi_rxcq_open err " << err << "\n";
+  std::cout << "--- fi->tx_attr-size: " 
+            << fi->tx_attr->size << "\n"
+            << "--- fi->rx_attr->size: "
+            << fi->rx_attr->size << "\n";
 
   // open endpoint
   err = fi_endpoint(domain, fi, &ep, NULL);
