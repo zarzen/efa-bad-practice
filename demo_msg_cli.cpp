@@ -18,8 +18,8 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
   // launch socket client
   SockCli cli(ip, port);
   // exchange EFA address with socket server
-  char local_ep_addrs[addr_size] = {0};
-  char remote_ep_addrs[addr_size] = {0};
+  char local_ep_addrs[64] = {0};
+  char remote_ep_addrs[64] = {0};
   char readable[64] = {0};
 
   efa->get_name(local_ep_addrs, addr_size);
