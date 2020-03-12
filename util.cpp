@@ -1,5 +1,6 @@
 
 #include "util.h"
+#include <iostream>
 
 namespace trans {
 
@@ -11,6 +12,7 @@ void wait_cq(fid_cq *cq, int count) {
   int timeout = 100000;
   fi_addr_t from;
   // printf("wait_cq cq addr %p\n", cq);
+  auto s = std::chrono::high_resolution_clock::now();
   while (completed < count) {
     // ret = fi_cq_readfrom(cq, &entry, 1, &from);
     // ret = fi_cq_sread(cq, &entry, 1, NULL, timeout);
@@ -31,6 +33,10 @@ void wait_cq(fid_cq *cq, int count) {
 
     CHK_ERR("fi_cq_read ????", (ret < 0), ret);
     completed++;
+    auto e = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> cost_t = e - s;
+    std::cout << completed << " job cost : " << cost_t.count() << " ms\n";
+    s = std::chrono::high_resolution_clock::now();
   }
 };
 
