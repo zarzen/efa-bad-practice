@@ -44,7 +44,7 @@ fid_cq *Communicator::_atask(Tasks *t) {
   cur_worker += 1;
   cur_worker %= numThd;
 
-  fid_cq *cq = t->type == SEND ? w->ep->txcq : w->ep->rxcq;
+  fid_cq *cq = t->type == SEND ? w->ep->cq : w->ep->cq;
   return cq;
 };
 

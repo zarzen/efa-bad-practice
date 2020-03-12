@@ -81,7 +81,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   recv_once->sizes.push_back(inst_size);
   recv_once->numTask = 1;
   put_tasks(task_q, task_m, recv_once);
-  wait_cq(efa->rxcq, 1);
+  wait_cq(efa->cq, 1);
   printf("Recv request msg: %s\n", req_buf);
 
   // send parameter tasks
@@ -98,7 +98,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
     send_p->sizes.push_back(batch_p_size);
   }
   put_tasks(task_q, task_m, send_p);
-  wait_cq(efa->txcq, send_p->numTask);
+  wait_cq(efa->cq, send_p->numTask);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;

@@ -9,7 +9,7 @@ EFAEndpoint::EFAEndpoint(std::string nickname) {
 
 int EFAEndpoint::init_res() {
   struct fi_info *hints;
-  struct fi_cq_attr txcq_attr, rxcq_attr;
+  struct fi_cq_attr cq_attr;
   struct fi_av_attr av_attr;
   int err;
   std::string provider = "efa";
@@ -19,8 +19,7 @@ int EFAEndpoint::init_res() {
     std::cerr << "fi_allocinfo err " << -ENOMEM << "\n";
 
   // clear all buffers
-  memset(&txcq_attr, 0, sizeof(txcq_attr));
-  memset(&rxcq_attr, 0, sizeof(rxcq_attr));
+  memset(&cq_attr, 0, sizeof(cq_attr));
   memset(&av_attr, 0, sizeof(av_attr));
 
   // get provider
@@ -48,16 +47,11 @@ int EFAEndpoint::init_res() {
     std::cerr << "fi_av_open err " << err << "\n";
 
   // open complete queue
-  txcq_attr.format = FI_CQ_FORMAT_TAGGED;
-  txcq_attr.size = fi->tx_attr->size;
-  rxcq_attr.format = FI_CQ_FORMAT_TAGGED;
-  rxcq_attr.size = fi->rx_attr->size;
-  err = fi_cq_open(domain, &txcq_attr, &txcq, NULL);
+  cq_attr.format = FI_CQ_FORMAT_TAGGED;
+  cq_attr.size = fi->tx_attr->size;
+  err = fi_cq_open(domain, &cq_attr, &cq, NULL);
   if (err < 0)
-    std::cerr << "fi_txcq_open err " << err << "\n";
-  err = fi_cq_open(domain, &rxcq_attr, &rxcq, NULL);
-  if (err < 0)
-    std::cerr << "fi_rxcq_open err " << err << "\n";
+    std::cerr << "cq err " << err << "\n";
 
   // open endpoint
   err = fi_endpoint(domain, fi, &ep, NULL);
@@ -65,14 +59,10 @@ int EFAEndpoint::init_res() {
     std::cerr << "fi_endpoint err " << err << "\n";
 
   // bind complete queue, address vector to endpoint
-  err = fi_ep_bind(ep, (fid_t)txcq, FI_SEND);
+  err = fi_ep_bind(ep, (fid_t)cq, FI_SEND | FI_RECV);
   if (err < 0)
-    std::cerr << "fi_ep_bind txcq err " << err << "\n";
-  err = fi_ep_bind(ep, (fid_t)rxcq, FI_RECV);
-  printf("%s rxcq : %p\n", this->nickname.c_str(), rxcq);
-  if (err < 0)
-    std::cerr << "fi_ep_bind rxcq err " << err << "\n";
-  // printf("%s bind txcq %p; rxcq %p;\n", nickname.c_str(), txcq, rxcq);
+    std::cerr << "fi_ep_bind cq err " << err << "\n";
+  
   err = fi_ep_bind(ep, (fid_t)av, 0);
   if (err < 0)
     std::cerr << "fi_ep_bind av err " << err << "\n";
@@ -101,8 +91,7 @@ void EFAEndpoint::insert_peer_address(char *addr) {
 
 EFAEndpoint::~EFAEndpoint() {
   fi_close((fid_t)ep);
-  fi_close((fid_t)txcq);
-  fi_close((fid_t)rxcq);
+  fi_close((fid_t)cq);
   fi_close((fid_t)av);
   fi_close((fid_t)domain);
   fi_close((fid_t)fabric);

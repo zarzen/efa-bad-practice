@@ -102,7 +102,7 @@ void fake_serv_param(trans::EFAEndpoint *efa) {
 // recv a fake request from client
   int inst_size = 64;
   fi_recv(efa->ep, req_buf, inst_size, NULL, FI_ADDR_UNSPEC, NULL);
-  wait_cq(efa->rxcq, 1);
+  wait_cq(efa->cq, 1);
   printf("Recv request msg: %s\n", req_buf);
 
   // send parameter tasks
@@ -114,7 +114,7 @@ void fake_serv_param(trans::EFAEndpoint *efa) {
     char* _buf_s = p_buf + i * batch_p_size;
     fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
   }
-  wait_cq(efa->txcq, total_size/batch_p_size);
+  wait_cq(efa->cq, total_size/batch_p_size);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;

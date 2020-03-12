@@ -84,7 +84,7 @@ void fake_param_trans(trans::EFAEndpoint *efa) {
   memcpy(send_buf, req_msg.c_str(), req_msg.length());
 
   fi_send(efa->ep, send_buf, inst_size, NULL, efa->peer_addr, NULL);
-  wait_cq(efa->txcq, 1);
+  wait_cq(efa->cq, 1);
 
   // receiving tasks
   auto s = std::chrono::high_resolution_clock::now();
@@ -97,7 +97,7 @@ void fake_param_trans(trans::EFAEndpoint *efa) {
 
   std::cout << "after launch fi_recv s " 
             << std::chrono::high_resolution_clock::now().time_since_epoch().count() << "\n";
-  wait_cq(efa->rxcq, total_size / batch_p_size);
+  wait_cq(efa->cq, total_size / batch_p_size);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;

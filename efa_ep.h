@@ -21,7 +21,7 @@ public:
   struct fid_domain *domain;
   struct fid_av *av;
   struct fid_ep *ep;
-  struct fid_cq *txcq, *rxcq;
+  struct fid_cq *cq;
   fi_addr_t peer_addr;
 
   size_t max_size = 64;
