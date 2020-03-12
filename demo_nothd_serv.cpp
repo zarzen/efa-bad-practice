@@ -1,11 +1,38 @@
 #include "sock_cli_serv.h"
-#include "efa_thd.h"
-#include "util.h"
+// #include "efa_thd.h"
+// #include "util.h"
+#include "efa_ep.h"
 #include <iostream>
 #include <thread>
 #include <queue>
 
 using namespace trans;
+void wait_cq(fid_cq *cq, int wait_for) {
+  struct fi_cq_err_entry entry;
+  int ret, completed = 0;
+
+  while (completed < wait_for) {
+    // ret = fi_cq_readfrom(cq, &entry, 1, &from);
+    // ret = fi_cq_sread(cq, &entry, 1, NULL, timeout);
+    ret = fi_cq_read(cq, &entry, 1);
+    if (ret == -FI_EAGAIN)
+      continue;
+
+    if (ret == -FI_EAVAIL) {
+      ret = fi_cq_readerr(cq, &entry, 1);
+      if (ret != 1)
+        std::cerr << "fi_cq_readerr\n";
+
+      printf("Completion with error: %d\n", entry.err);
+      // if (entry.err == FI_EADDRNOTAVAIL)
+      // 	get_peer_addr(entry.err_data);
+    }
+
+    if (ret < 0)
+      std::cerr << "fi_cq_read\n";
+    completed++;
+  }
+};
 
 int batch_p_size = 2 * 1024 * 1024; // 2MB
 int total_size = 200 * 1024 * 1024; // 200MB

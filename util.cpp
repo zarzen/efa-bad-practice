@@ -16,7 +16,7 @@ void wait_cq(fid_cq *cq, int count) {
     // ret = fi_cq_sread(cq, &entry, 1, NULL, timeout);
     ret = fi_cq_read(cq, &entry, 1);
     if (ret == -FI_EAGAIN) {
-      std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+      // std::this_thread::sleep_for(std::chrono::nanoseconds(100));
       continue;
     }
 

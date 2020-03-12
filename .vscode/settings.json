@@ -3,6 +3,7 @@
       "/opt/amazon/efa/include"
   ],
   "files.associations": {
-    "thread": "cpp"
+    "thread": "cpp",
+    "chrono": "cpp"
   }
 }
