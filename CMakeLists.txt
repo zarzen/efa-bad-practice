@@ -77,5 +77,11 @@ target_link_libraries(msg_cli ${LIBFABRIC_LIBRARY} pthread)
 add_executable(msg_serv demo_msg_serv.cpp ${common_files})
 target_link_libraries(msg_serv ${LIBFABRIC_LIBRARY} pthread)
 
+add_executable(nothd_cli demo_nothd_cli.cpp ${common_files})
+target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread)
+
+add_executable(nothd_serv demo_nothd_serv.cpp ${common_files})
+target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread)
+
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
