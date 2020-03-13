@@ -39,7 +39,7 @@ void sock_cli(std::string ip, std::string port) {
     char *_buf_s = p_buf + i * batch_p_size;
     int got_size = cli._recv(_buf_s, batch_p_size);
     if (got_size != batch_p_size) 
-      std::cerr << "err while receiving\n";
+      std::cerr << ">>> err while receiving\n";
     auto e = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> cost_t = e - s;
     float bw = ((batch_p_size * 8) / (cost_t.count() / 1e3) ) / 1e9;
@@ -66,7 +66,7 @@ void sock_serv(std::string ip, std::string port) {
     do {
       send_size = serv._send(_buf_s, batch_p_size);
       if (send_size != batch_p_size) {
-        std::cout << "err while sending \n"
+        std::cout << ">>>> err while sending \n"
                   << "send out " << send_size << "\n";
       }
     } while (send_size != batch_p_size);
