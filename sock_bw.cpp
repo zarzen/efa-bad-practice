@@ -4,7 +4,7 @@
 #include <string.h>
 #include <chrono>
 
-int batch_p_size = 4 * 1024 * 1024; // 5MB
+int batch_p_size = 2 * 1024 * 1024; // 5MB
 int total_size = 200 * 1024 * 1024; // 200MB
 
 static const char integ_alphabet[] =
@@ -59,12 +59,17 @@ void sock_serv(std::string ip, std::string port) {
   // sending out parameters
   char *p_buf = new char[total_size];
   ft_fill_buf(p_buf, total_size);
-  for (int i = 0; i < total_size / batch_p_size; ++i) {
+  for (int i = 0; i < total_size / batch_p_size; i++) {
     auto s = std::chrono::high_resolution_clock::now();
     char *_buf_s = p_buf + i * batch_p_size;
-    int send_size = serv._send(_buf_s, batch_p_size);
-    if (send_size != batch_p_size) 
-      std::cout << "err while sending\n";
+    int send_size;
+    do {
+      send_size = serv._send(_buf_s, batch_p_size);
+      if (send_size != batch_p_size) {
+        std::cout << "err while sending \n"
+                  << "send out " << send_size << "\n";
+      }
+    } while (send_size != batch_p_size);
 
     auto e = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> cost_t = e - s;
@@ -72,6 +77,7 @@ void sock_serv(std::string ip, std::string port) {
     std::cout << i << ": cost time" << cost_t.count() << " ms\n"
               << "bw: " << bw << "Gbps\n";
   }
+  std::cout << "End exp\n";
 };
 
 int main(int argc, char *argv[]) {
