@@ -4,8 +4,28 @@
 #include <string.h>
 #include <chrono>
 
-int batch_p_size = 5 * 1024 * 1024; // 5MB
+int batch_p_size = 4 * 1024 * 1024; // 5MB
 int total_size = 200 * 1024 * 1024; // 200MB
+
+static const char integ_alphabet[] =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+static const int integ_alphabet_length =
+    (sizeof(integ_alphabet) / sizeof(*integ_alphabet)) - 1;
+void ft_fill_buf(void *buf, int size) {
+
+  char *msg_buf;
+  int msg_index;
+  static unsigned int iter = 0;
+  int i;
+
+  msg_index = ((iter++) * 7) % integ_alphabet_length;
+  msg_buf = (char *)buf;
+  for (i = 0; i < size; i++) {
+    msg_buf[i] = integ_alphabet[msg_index++];
+    if (msg_index >= integ_alphabet_length)
+      msg_index = 0;
+  }
+};
 
 void sock_cli(std::string ip, std::string port) {
   trans::SockCli cli(ip, port);
@@ -38,12 +58,13 @@ void sock_serv(std::string ip, std::string port) {
 
   // sending out parameters
   char *p_buf = new char[total_size];
+  ft_fill_buf(p_buf, total_size);
   for (int i = 0; i < total_size / batch_p_size; ++i) {
     auto s = std::chrono::high_resolution_clock::now();
     char *_buf_s = p_buf + i * batch_p_size;
     int send_size = serv._send(_buf_s, batch_p_size);
     if (send_size != batch_p_size) 
-      std::cerr << "err while sending\n";
+      std::cout << "err while sending\n";
 
     auto e = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> cost_t = e - s;
