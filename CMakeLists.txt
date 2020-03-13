@@ -83,5 +83,8 @@ target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread)
 add_executable(nothd_serv demo_nothd_serv.cpp ${common_files})
 target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread)
 
+add_executable(sock_bw sock_bw.cpp sock_cli_serv.cpp)
+target_link_libraries(sock_bw)
+
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
