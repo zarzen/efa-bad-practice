@@ -88,8 +88,11 @@ void fake_serv_param(trans::EFAEndpoint *efa) {
   for (int i = 0; i < total_size / batch_p_size; ++i) {
     char* _buf_s = p_buf + i * batch_p_size;
     fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+    if ((i+1) % 10 == 0) {
+        wait_cq(efa->txcq, 10);
+    }
   }
-  wait_cq(efa->txcq, total_size/batch_p_size);
+  // wait_cq(efa->txcq, total_size/batch_p_size);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;

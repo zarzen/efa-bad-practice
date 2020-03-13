@@ -68,11 +68,14 @@ void fake_param_trans(trans::EFAEndpoint *efa) {
     // char* _buf_s = p_buf + i * batch_p_size;
     // fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
     fi_recv(efa->ep, p_buf, batch_p_size, NULL, 0, NULL);
+    if ((i+1) % 10 == 0) {
+        wait_cq(efa->rxcq, 10);
+    }
   }
 
-  std::cout << "after launch fi_recv s " 
-            << std::chrono::high_resolution_clock::now().time_since_epoch().count() << "\n";
-  wait_cq(efa->rxcq, total_size / batch_p_size);
+  // std::cout << "after launch fi_recv s " 
+  //           << std::chrono::high_resolution_clock::now().time_since_epoch().count() << "\n";
+  // wait_cq(efa->rxcq, total_size / batch_p_size);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;
