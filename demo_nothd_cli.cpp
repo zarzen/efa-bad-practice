@@ -7,11 +7,21 @@
 #include <queue>
 
 using namespace trans;
-int batch_p_size = 2 * 1024 * 1024; // 2MB
+int batch_p_size = 1 * 1024 * 1024; // 2MB
 int total_size = 200 * 1024 * 1024; // 200MB
 char *p_buf ;
 char *send_buf;
 
+void cli_pingpong(trans::EFAEndpoint *efa) {
+  char *ping_send = new char[batch_p_size];
+  char *ping_recv = new char[batch_p_size];
+  fi_send(efa->ep, ping_send, batch_p_size, NULL, efa->peer_addr, NULL);
+  wait_cq(efa->txcq, 1);
+  fi_recv(efa->ep, ping_recv, batch_p_size, NULL, efa->peer_addr, NULL);
+  wait_cq(efa->rxcq, 1);
+  delete[] ping_send;
+  delete[] ping_recv;
+};
 
 void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoint *efa) {
   int numThd = 1; // ignore third parameter
@@ -52,6 +62,7 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
 };
 
 void fake_param_trans(trans::EFAEndpoint *efa) {
+  cli_pingpong(efa); // assume pingpong background message always exist
     // send a fake request
   int inst_size = 64;
   std::string req_msg = "<fake-request-for-parameters>";
@@ -102,6 +113,7 @@ int main(int argc, char *argv[]) {
   
   for (int i = 0; i < 10; i ++ ){
     std::cout << i << " :";
+    
     fake_param_trans(&efa);
     // std::this_thread::sleep_for(std::chrono::seconds(5));
   }

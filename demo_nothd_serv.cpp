@@ -9,7 +9,7 @@
 using namespace trans;
 
 
-int batch_p_size = 2 * 1024 * 1024; // 2MB
+int batch_p_size = 1 * 1024 * 1024; // 2MB
 int total_size = 200 * 1024 * 1024; // 200MB
 char *req_buf;
 char *p_buf;
@@ -33,6 +33,19 @@ void ft_fill_buf(void *buf, int size) {
       msg_index = 0;
   }
 };
+
+void serv_pingpong(trans::EFAEndpoint *efa) {
+  char *pong_send = new char[batch_p_size];
+  char *pong_recv = new char[batch_p_size];
+  fi_recv(efa->ep, pong_recv, batch_p_size, NULL, efa->peer_addr, NULL);
+  wait_cq(efa->rxcq, 1);
+  fi_send(efa->ep, pong_send, batch_p_size, NULL, efa->peer_addr, NULL);
+  wait_cq(efa->txcq, 1);
+  
+  delete[] pong_send;
+  delete[] pong_recv;
+};
+
 
 void serv_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoint *efa) {
   int numThd = 1; // ignore third parameter
@@ -74,6 +87,7 @@ void serv_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpo
 };
 
 void fake_serv_param(trans::EFAEndpoint *efa) {
+  serv_pingpong(efa); // assume pingpong background message always exist
 // recv a fake request from client
   int inst_size = 64;
   fi_recv(efa->ep, req_buf, inst_size, NULL, FI_ADDR_UNSPEC, NULL);
@@ -120,6 +134,7 @@ int main(int argc, char *argv[]) {
   req_buf = new char[64];
 
   for (int i = 0; i < 10; i ++ ){
+    
     fake_serv_param(&efa);
     // std::this_thread::sleep_for(std::chrono::seconds(5));
   }
