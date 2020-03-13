@@ -83,18 +83,22 @@ void fake_serv_param(trans::EFAEndpoint *efa) {
   // send parameter tasks
   
   ft_fill_buf(p_buf, total_size);
-
+  int warmup = 5;
   auto s = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < total_size / batch_p_size; ++i) {
     char* _buf_s = p_buf + i * batch_p_size;
     fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+    if (i < warmup) {
+      wait_cq(efa->txcq, 1);
+      s = std::chrono::high_resolution_clock::now();
+    }
   }
-  wait_cq(efa->txcq, total_size/batch_p_size);
+  wait_cq(efa->txcq, total_size/batch_p_size - warmup);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;
   float dur = cost_t.count();
-  float bw = (total_size * 8 / (dur / 1000)) / 1e9;
+  float bw = ((total_size - warmup * batch_p_size) * 8 / (dur / 1000)) / 1e9;
   std::cout << "Send bw: " << bw << " Gbps\n";
 
 

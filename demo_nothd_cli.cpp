@@ -60,24 +60,28 @@ void fake_param_trans(trans::EFAEndpoint *efa) {
   fi_send(efa->ep, send_buf, inst_size, NULL, efa->peer_addr, NULL);
   wait_cq(efa->txcq, 1);
 
+  int warmup = 5;
   // receiving tasks
   auto s = std::chrono::high_resolution_clock::now();
   std::cout << "start new fi_recv tasks " << s.time_since_epoch().count() << "\n";
-
   for (int i = 0; i < total_size/batch_p_size; ++i) {
     // char* _buf_s = p_buf + i * batch_p_size;
     // fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
     fi_recv(efa->ep, p_buf, batch_p_size, NULL, 0, NULL);
+    if (i < warmup) {
+      wait_cq(efa->rxcq, 1);
+      s = std::chrono::high_resolution_clock::now();
+    }
   }
 
   std::cout << "after launch fi_recv s " 
             << std::chrono::high_resolution_clock::now().time_since_epoch().count() << "\n";
-  wait_cq(efa->rxcq, total_size / batch_p_size);
+  wait_cq(efa->rxcq, total_size / batch_p_size - warmup);
 
   auto e = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> cost_t = e - s;
   float dur = cost_t.count();
-  float bw = (total_size * 8 / (dur / 1000)) / 1e9;
+  float bw = ((total_size - warmup * batch_p_size) * 8 / (dur / 1000)) / 1e9;
   std::cout << "Recv bw: " << bw << " Gbps\n"
             << "Dur " << dur << " ms \n";
 
