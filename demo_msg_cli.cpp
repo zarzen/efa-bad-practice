@@ -76,9 +76,9 @@ void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
     recv_p->bufs.push_back(_buf_s);
     recv_p->sizes.push_back(batch_p_size);
   }
+  std::cout << "-- right before put tasks to queue " << time_now() << "\n";
   put_tasks(task_q, task_m, recv_p);
-  std::cout << "-- after put tasks " 
-            << time_now() << "\n";
+  std::cout << "-- start to wait tasks completion " << time_now() << "\n";
   wait_cq(efa->rxcq, total_size / batch_p_size);
 
   auto e = time_now();
@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
   std::mutex task_m;
   // launch thread for EFA endpoint
   std::thread efa_operator(efa_worker_thd, "cli-efa-worker", &efa, &task_q, &task_m);
+  efa_operator.detach();
   // make sure EFAEndpoint created
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
