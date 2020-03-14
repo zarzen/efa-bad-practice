@@ -86,7 +86,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
 
   // send parameter tasks
   
-  ft_fill_buf(p_buf, total_size);
+  // ft_fill_buf(p_buf, total_size);
 
   auto s = std::chrono::high_resolution_clock::now();
   Tasks *send_p = new Tasks();
@@ -132,9 +132,9 @@ int main(int argc, char *argv[]) {
   serv_efa_address_exchange(ip, port, efa);
   p_buf = new char[total_size];
   req_buf = new char[64];
-
+  ft_fill_buf(p_buf, total_size);
   for (int i = 0; i < 10; i ++ ){
     fake_serv_param(efa, &task_q, &task_m);
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 };

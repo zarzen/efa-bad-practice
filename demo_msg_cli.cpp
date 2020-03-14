@@ -117,6 +117,6 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < 10; i ++ ){
     std::cout << i << " :";
     fake_param_trans(efa, &task_q, &task_m);
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 };
