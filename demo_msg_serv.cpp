@@ -88,7 +88,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   
   // ft_fill_buf(p_buf, total_size);
 
-  auto s = std::chrono::high_resolution_clock::now();
+  double st = time_now();
   Tasks *send_p = new Tasks();
   send_p->type = SEND;
   send_p->numTask = total_size / batch_p_size;
@@ -100,10 +100,9 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   put_tasks(task_q, task_m, send_p);
   wait_cq(efa->txcq, send_p->numTask);
 
-  auto e = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> cost_t = e - s;
-  float dur = cost_t.count();
-  float bw = (total_size * 8 / (dur / 1000)) / 1e9;
+  double et = time_now();
+  double dur = et - st;
+  float bw = (total_size * 8 / dur) / 1e9;
   std::cout << "Send bw: " << bw << " Gbps\n";
 
   delete recv_once;

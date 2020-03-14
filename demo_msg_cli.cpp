@@ -66,8 +66,8 @@ void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   wait_cq(efa->txcq, 1);
 
   // receiving tasks
-  auto s = std::chrono::high_resolution_clock::now();
-  std::cout << "start new tasks " << s.time_since_epoch().count() << "\n";
+  double s = time_now();
+  std::cout << "-- start new recv tasks " << s << "\n";
   Tasks *recv_p = new Tasks();
   recv_p->type = RECV;
   recv_p->numTask = total_size / batch_p_size;
@@ -77,16 +77,15 @@ void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
     recv_p->sizes.push_back(batch_p_size);
   }
   put_tasks(task_q, task_m, recv_p);
-  std::cout << "after put tasks " 
-            << std::chrono::high_resolution_clock::now().time_since_epoch().count() << "\n";
+  std::cout << "-- after put tasks " 
+            << time_now() << "\n";
   wait_cq(efa->rxcq, total_size / batch_p_size);
 
-  auto e = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> cost_t = e - s;
-  float dur = cost_t.count();
-  float bw = (total_size * 8 / (dur / 1000)) / 1e9;
+  auto e = time_now();
+  float dur = e - s;
+  float bw = (total_size * 8 / (dur)) / 1e9;
   std::cout << "Recv bw: " << bw << " Gbps\n"
-            << "Dur " << dur << " ms \n";
+            << "Dur " << dur * 1e3 << " ms \n";
 
   delete send_once;
   delete recv_p;
