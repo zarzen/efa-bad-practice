@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <queue>
+#include <sys/mman.h>
 
 using namespace trans;
 int batch_p_size = 2 * 1024 * 1024; // 2MB
@@ -51,7 +52,7 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
 };
 
 void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
-                      std::mutex *task_m) {
+                      std::mutex *task_m, int* cntr) {
     // send a fake request
   int inst_size = 64;
   Tasks *send_once = new Tasks();
@@ -64,31 +65,35 @@ void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   // put the task into queue
   put_tasks(task_q, task_m, send_once);
   wait_cq(efa->txcq, 1);
+  delete send_once;
 
   // receiving tasks
   double s = time_now();
   std::cout << "-- start new recv tasks " << s << "\n";
-  Tasks *recv_p = new Tasks();
-  recv_p->type = RECV;
-  recv_p->numTask = total_size / batch_p_size;
-  for (int i = 0; i < recv_p->numTask; ++i) {
-    char* _buf_s = p_buf + i * batch_p_size;
-    recv_p->bufs.push_back(_buf_s);
-    recv_p->sizes.push_back(batch_p_size);
+  int sc = 100; // threshold for sub tasks
+  int total_tasks = total_size / batch_p_size;
+  for (int i = 0; i < total_tasks / sc; i ++ ) {
+    Tasks *recv_p = new Tasks();
+    recv_p->type = RECV;
+    recv_p->numTask = sc;
+    for (int j = 0; j < sc; ++j) {
+      char* _buf_s = p_buf + i * sc * batch_p_size + j * batch_p_size;
+      recv_p->bufs.push_back(_buf_s);
+      recv_p->sizes.push_back(batch_p_size);
+    }
+
+    std::cout << "-- right before put tasks to queue " << time_now() << "\n";
+    put_tasks(task_q, task_m, recv_p);
+    std::cout << "-- start to wait tasks completion " << time_now() << "\n";
+    wait_cq(efa->rxcq, sc);
+    delete recv_p;
   }
-  std::cout << "-- right before put tasks to queue " << time_now() << "\n";
-  put_tasks(task_q, task_m, recv_p);
-  std::cout << "-- start to wait tasks completion " << time_now() << "\n";
-  wait_cq(efa->rxcq, total_size / batch_p_size);
 
   auto e = time_now();
   float dur = e - s;
   float bw = (total_size * 8 / (dur)) / 1e9;
   std::cout << "Recv bw: " << bw << " Gbps\n"
             << "Dur " << dur * 1e3 << " ms \n";
-
-  delete send_once;
-  delete recv_p;
 
 };
 
@@ -104,19 +109,22 @@ int main(int argc, char *argv[]) {
   trans::EFAEndpoint *efa;
   std::queue<Tasks*> task_q;
   std::mutex task_m;
+  int task_cntr = 0;
   // launch thread for EFA endpoint
-  std::thread efa_operator(efa_worker_thd, "cli-efa-worker", &efa, &task_q, &task_m);
+  std::thread efa_operator(efa_worker_thd, "cli-efa-worker", 
+                            &efa, &task_q, &task_m, &task_cntr);
   efa_operator.detach();
   // make sure EFAEndpoint created
   std::this_thread::sleep_for(std::chrono::seconds(1));
-
+  std::cout.precision(9);
   cli_efa_address_exchange(ip, port, efa);
   p_buf = new char[total_size];
   send_buf = new char[64];
-  
+  // mlock(p_buf, total_size);
+  // mlock(send_buf, 64);
   for (int i = 0; i < 10; i ++ ){
     std::cout << i << " :";
-    fake_param_trans(efa, &task_q, &task_m);
+    fake_param_trans(efa, &task_q, &task_m, &task_cntr);
     // std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 };

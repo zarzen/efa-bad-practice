@@ -1,9 +1,10 @@
 #include "efa_thd.h"
+#include <sstream>
 
 namespace trans {
 
 void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
-                    std::queue<Tasks *> *task_q, std::mutex *task_m) {
+                    std::queue<Tasks *> *task_q, std::mutex *task_m, int* cntr) {
   *efa = new trans::EFAEndpoint(thd_name + "-efa-ep");
   struct fid_ep *ep = (*efa)->ep;
   // assume always communicate to peer 0
@@ -39,6 +40,8 @@ void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
           } else {
             std::cerr << "== impossible task type encoutered\n";
           }
+          // double _t = time_now();
+          // std::cout << i << " ** async task complete : " << _t << " \n";
         }
         auto e = time_now();
         std::cout << "== all async tasks launched " 

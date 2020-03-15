@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <queue>
+#include <sys/mman.h>
 
 using namespace trans;
 
@@ -72,7 +73,7 @@ void serv_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpo
 };
 
 void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
-                      std::mutex *task_m) {
+                      std::mutex *task_m, int* cntr) {
 // recv a fake request from client
   int inst_size = 64;
   Tasks *recv_once = new Tasks();
@@ -82,6 +83,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   recv_once->numTask = 1;
   put_tasks(task_q, task_m, recv_once);
   wait_cq(efa->rxcq, 1);
+  delete recv_once;
   printf("Recv request msg: %s\n", req_buf);
 
   // send parameter tasks
@@ -90,26 +92,33 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
 
   double st = time_now();
   std::cout << "-- start send tasks at " << st << "\n";
-  Tasks *send_p = new Tasks();
-  send_p->type = SEND;
-  send_p->numTask = total_size / batch_p_size;
-  for (int i = 0; i < send_p->numTask; ++i) {
-    char* _buf_s = p_buf + i * batch_p_size;
-    send_p->bufs.push_back(_buf_s);
-    send_p->sizes.push_back(batch_p_size);
+  int sc = 100; // threshold for sub tasks
+  int total_tasks = total_size / batch_p_size;
+  for (int i = 0; i < total_tasks / sc; i ++ ) {
+    Tasks *send_p = new Tasks();
+    send_p->type = SEND;
+    send_p->numTask = sc;
+    for (int j = 0; j < sc; ++j ) {
+      char* _buf_s = p_buf + i * sc * batch_p_size + j * batch_p_size;
+      send_p->bufs.push_back(_buf_s);
+      send_p->sizes.push_back(batch_p_size);
+    }
+
+    std::cout << "-- right before put tasks to queue " << time_now() << "\n";
+    put_tasks(task_q, task_m, send_p);
+    std::cout << "-- start to wait tasks completion " << time_now() << "\n";
+    // wait for sub tasks to complete
+    wait_cq(efa->txcq, send_p->numTask);
+    delete send_p;
   }
-  std::cout << "-- right before put tasks to queue " << time_now() << "\n";
-  put_tasks(task_q, task_m, send_p);
-  std::cout << "-- start to wait tasks completion " << time_now() << "\n";
-  wait_cq(efa->txcq, send_p->numTask);
 
   double et = time_now();
   double dur = et - st;
   float bw = (total_size * 8 / dur) / 1e9;
   std::cout << "Send bw: " << bw << " Gbps\n";
 
-  delete recv_once;
-  delete send_p;
+  
+  
 
 };
 
@@ -126,18 +135,21 @@ int main(int argc, char *argv[]) {
   trans::EFAEndpoint *efa;
   std::queue<Tasks*> task_q;
   std::mutex task_m;
+  int task_cntr = 0;
   // launch thread for EFA endpoint
-  std::thread efa_operator(efa_worker_thd, "cli-efa-worker", &efa, &task_q, &task_m);
+  std::thread efa_operator(efa_worker_thd, "cli-efa-worker", &efa, &task_q, &task_m, &task_cntr);
   efa_operator.detach();
   // make sure EFAEndpoint created
   std::this_thread::sleep_for(std::chrono::seconds(1));
-
+  std::cout.precision(9);
   serv_efa_address_exchange(ip, port, efa);
   p_buf = new char[total_size];
   req_buf = new char[64];
+  // mlock(p_buf, total_size);
+  // mlock(req_buf, 64);
   ft_fill_buf(p_buf, total_size);
   for (int i = 0; i < 10; i ++ ){
-    fake_serv_param(efa, &task_q, &task_m);
+    fake_serv_param(efa, &task_q, &task_m, &task_cntr);
     // std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 };

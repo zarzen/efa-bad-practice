@@ -7,7 +7,7 @@ namespace trans {
 Tasks::Tasks(){};
 
 void wait_cq(fid_cq *cq, int count) {
-  std::cout.precision(9);
+
   struct fi_cq_err_entry entry;
   int ret, completed = 0;
   int timeout = 100000;
