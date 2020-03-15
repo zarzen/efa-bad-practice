@@ -46,8 +46,13 @@ void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
         auto e = time_now();
         std::cout << "== all async tasks launched " 
                   << e << "\n";
-        // delete Tasks pointer
-        // delete t;
+        // wait 
+        if (t->type == RECV) {
+          wait_cq((*efa)->rxcq, t->numTask);
+        } else {
+          wait_cq((*efa)->txcq, t->numTask);
+        }
+        (*cntr) += t->numTask;
       } else {
         // std::this_thread::sleep_for(std::chrono::microseconds(100));
       }

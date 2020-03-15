@@ -82,7 +82,10 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   recv_once->sizes.push_back(inst_size);
   recv_once->numTask = 1;
   put_tasks(task_q, task_m, recv_once);
-  wait_cq(efa->rxcq, 1);
+  // wait_cq(efa->rxcq, 1);
+  while(*cntr < 1) {
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
   delete recv_once;
   printf("Recv request msg: %s\n", req_buf);
 
@@ -92,7 +95,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
 
   double st = time_now();
   std::cout << "-- start send tasks at " << st << "\n";
-  int sc = 100; // threshold for sub tasks
+  int sc = 10; // threshold for sub tasks
   int total_tasks = total_size / batch_p_size;
   for (int i = 0; i < total_tasks / sc; i ++ ) {
     Tasks *send_p = new Tasks();
@@ -108,7 +111,10 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
     put_tasks(task_q, task_m, send_p);
     std::cout << "-- start to wait tasks completion " << time_now() << "\n";
     // wait for sub tasks to complete
-    wait_cq(efa->txcq, send_p->numTask);
+    // wait_cq(efa->txcq, send_p->numTask);
+    while ((*cntr) < (1 + (i+1) * sc)) {
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
     delete send_p;
   }
 
@@ -117,9 +123,8 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   float bw = (total_size * 8 / dur) / 1e9;
   std::cout << "Send bw: " << bw << " Gbps\n";
 
+  *cntr = 0;
   
-  
-
 };
 
 
