@@ -10,6 +10,9 @@ void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
   // assume always communicate to peer 0
   // but make sure address already inserted through fi_av_insert()
   fi_addr_t peer_addr = 0;
+  int total_size = 200 * 1024 * 1024; // 200MB
+  int batch_p_size = 2 * 1024 * 1024; // 2MB
+  char * local_p_buf = new char[total_size];
   try {
     while (1) {
       // only pop here, delete lock
@@ -27,14 +30,15 @@ void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
         std::cout << "== worker thd got new tasks " 
                   << s << "\n";
         for (int i = 0; i < t->numTask; ++i) {
-          size_t len = t->sizes[i];
-          void *_buf = t->bufs[i];
+          // size_t len = t->sizes[i];
+          // void *_buf = t->bufs[i];
+          char *_buf_s = local_p_buf + i * batch_p_size;
           if (t->type == SEND) {
-            int err = fi_send(ep, _buf, len, NULL, peer_addr, NULL);
+            int err = fi_send(ep, _buf_s, batch_p_size, NULL, peer_addr, NULL);
             if (err < 0)
               std::cerr << "== fi_send Err: " << err << "\n";
           } else if (t->type == RECV) {
-            int err = fi_recv(ep, _buf, len, NULL, FI_ADDR_UNSPEC, NULL);
+            int err = fi_recv(ep, _buf_s, batch_p_size, NULL, FI_ADDR_UNSPEC, NULL);
             if (err < 0)
               std::cerr << "== fi_recv Err: " << err << "\n";
           } else {

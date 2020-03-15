@@ -95,7 +95,7 @@ void fake_serv_param(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
 
   double st = time_now();
   std::cout << "-- start send tasks at " << st << "\n";
-  int sc = 10; // threshold for sub tasks
+  int sc = 100; // threshold for sub tasks
   int total_tasks = total_size / batch_p_size;
   for (int i = 0; i < total_tasks / sc; i ++ ) {
     Tasks *send_p = new Tasks();
