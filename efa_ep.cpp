@@ -26,6 +26,8 @@ int EFAEndpoint::init_res() {
   // get provider
   hints->ep_attr->type = FI_EP_RDM;
   hints->fabric_attr->prov_name = strdup(provider.c_str());
+  // hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+  // hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
   err = fi_getinfo(FI_VERSION(1, 9), NULL, NULL, 0, hints, &fi);
   if (err < 0)
     std::cerr << "fi_getinfo err " << err << "\n";
@@ -37,6 +39,8 @@ int EFAEndpoint::init_res() {
   err = fi_fabric(fi->fabric_attr, &fabric, NULL);
   if (err < 0)
     std::cerr << "fi_fabric err " << err << "\n";
+  fi->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+  fi->domain_attr->data_progress = FI_PROGRESS_MANUAL;
   err = fi_domain(fabric, fi, &domain, NULL);
   if (err < 0)
     std::cerr << "fi_domain err " << err << "\n";
