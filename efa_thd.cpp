@@ -24,7 +24,7 @@ void efa_worker_thd(std::string thd_name, trans::EFAEndpoint **efa,
         task_q->pop();
 
         auto s = time_now();
-        std::cout << "== worker thd got new tasks " 
+        std::cout << "== worker thd got new tasks size: " << t->numTask << " at "
                   << s << "\n";
         for (int i = 0; i < t->numTask; ++i) {
           size_t len = t->sizes[i];

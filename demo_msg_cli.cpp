@@ -73,7 +73,7 @@ void fake_param_trans(trans::EFAEndpoint *efa, std::queue<Tasks*> *task_q,
   // receiving tasks
   double s = time_now();
   std::cout << "-- start new recv tasks " << s << "\n";
-  int sc = 20; // threshold for sub tasks
+  int sc = 100; // threshold for sub tasks
   int total_tasks = total_size / batch_p_size;
   for (int i = 0; i < total_tasks / sc; i ++ ) {
     Tasks *recv_p = new Tasks();
