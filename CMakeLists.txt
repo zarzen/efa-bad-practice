@@ -83,5 +83,14 @@ target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread)
 add_executable(nothd_serv demo_nothd_serv.cpp ${common_files})
 target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread)
 
+add_executable(shm_worker shm_worker.cpp util.cpp efa_ep.cpp)
+target_link_libraries(shm_worker ${LIBFABRIC_LIBRARY} pthread)
+
+add_executable(shm_cli shm_cli.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(shm_cli ${LIBFABRIC_LIBRARY} pthread)
+
+add_executable(shm_serv shm_serv.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(shm_serv ${LIBFABRIC_LIBRARY} pthread)
+
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
