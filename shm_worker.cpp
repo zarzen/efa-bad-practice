@@ -1,5 +1,7 @@
 #include <fcntl.h>
+#include <semaphore.h>
 #include <sys/mman.h>
+#include <sys/stat.h> /* For mode constants */
 #include <unistd.h>
 
 #include <chrono>
@@ -75,12 +77,14 @@ class WorkerMemory {
   std::string shm_data_buf;
   std::string shm_efa_addr;
   std::string shm_w_status;
+  std::string shm_mutex_name;
 
   void* instr_ptr;
   void* cntr_ptr;
   void* data_buf_ptr;
   void* efa_add_ptr;
   void* status_ptr;  // 1: idle; 2: working;
+  sem_t* sem_mutex;
 
   WorkerMemory(std::string prefix, bool truncate) {
     shm_instr = std::string(prefix + "-instr-mem");
@@ -88,7 +92,10 @@ class WorkerMemory {
     shm_data_buf = std::string(prefix + "-data-buf-mem");
     shm_efa_addr = std::string(prefix + "-efa-addr-mem");
     shm_w_status = std::string(prefix + "-worker-status-mem");
+    shm_mutex_name = std::string(prefix + "-mem-mutex");
     this->create_shm(truncate);
+    // create lock
+    sem_mutex = sem_open(shm_mutex_name.c_str(), O_CREAT);
   };
 
   void create_shm(bool truncate) {
@@ -123,6 +130,14 @@ class WorkerMemory {
                       worker_status_fd, 0);
   };
 
+  void mem_lock(std::string msg_if_err) {
+    check_err(sem_wait(sem_mutex) < 0, msg_if_err);
+  };
+
+  void mem_unlock(std::string msg_if_err) {
+    check_err(sem_post(sem_mutex) < 0, msg_if_err);
+  };
+
   ~WorkerMemory() {
     // un map
     munmap(instr_ptr, instr_size);
@@ -137,6 +152,8 @@ class WorkerMemory {
     shm_unlink(shm_data_buf.c_str());
     shm_unlink(shm_efa_addr.c_str());
     shm_unlink(shm_w_status.c_str());
+    // un link sem
+    sem_unlink(shm_mutex_name.c_str());
   };
 };
 
@@ -156,6 +173,7 @@ class SHMWorker {
   };
 
   Instruction* read_instr() {
+    mem->mem_lock("read_instr: sem_wait err");
     // read first 8 bytes for time stamp
     double ts = *((double*)mem->instr_ptr);
     if (ts == 0) {
@@ -172,6 +190,7 @@ class SHMWorker {
       std::fill_n(mem->instr_ptr, 12, 0);
       return i;
     }
+    mem->mem_unlock("read_instr: sem_post err");
   };
 
   void set_local_efa_addr(EFAEndpoint* efa) {
@@ -181,12 +200,18 @@ class SHMWorker {
     size_t len = mem->efa_addr_size;
     fi_av_straddr(efa->av, local_ep_addrs, readable, &len);
     std::cout << "Local ep addresses: \n" << readable << "\n";
+
+    mem->mem_lock("set_local_efa_addr: sem_wait err");
     std::memcpy(mem->efa_add_ptr, local_ep_addrs, mem->efa_addr_size);
+    mem->mem_unlock("set_local_efa_addr: sem_post err");
   };
 
   /* insert remote efa addr into address vector */
   void set_remote_efa_addr(EFAEndpoint* efa, Instruction* i) {
+    mem->mem_lock("set_remote_efa_addr: sem_wait err");
     fi_av_insert(efa->av, i->data, 1, &(efa->peer_addr), 0, NULL);
+    mem->mem_unlock("set_remote_efa_addr: sem_post err");
+
     efa->av_ready = true;
 
     char name_buf[mem->efa_addr_size];
@@ -209,7 +234,10 @@ class SHMWorker {
       wait_cq(efa->rxcq, 1);
       std::cout << name << ": efa recv msg: " << mem->data_buf_ptr << "\n";
     }
+
+    mem->mem_lock("efa_send_recv_instr: increase cntr sem_wait err");
     (*(int*)mem->cntr_ptr) += 1;
+    mem->mem_unlock("efa_send_recv_instr: increase cntr sem_post err");
   };
 
   /* assume the worker stores the partition of the parameters
@@ -234,8 +262,10 @@ class SHMWorker {
       // wait for receive queue
       wait_cq(efa->rxcq, total_size / batch_p_size);
     }
+    mem->mem_lock("efa_send_recv_param: increase cntr sem_wait err");
     // increase the counter; later can modify to progressively increase
     (*(int*)mem->cntr_ptr) += total_size / batch_p_size;
+    mem->mem_unlock("efa_send_recv_param: increase cntr sem_post err");
   }
 
   // main function of the shm worker
@@ -243,8 +273,10 @@ class SHMWorker {
     while (1) {
       Instruction* i = read_instr();
       if (i) {
+        mem->mem_lock("set worker status: sem_wait err");
         // set worker status as working
         *(int*)mem->status_ptr = 2;
+        mem->mem_unlock("set worker status: sem_post err");
         switch (i->type) {
           case SET_EFA_ADDR:
             this->set_remote_efa_addr(efa_ep, i);
@@ -262,8 +294,10 @@ class SHMWorker {
             this->efa_send_recv_param(efa_ep, i, true);
             break;
         }
+        mem->mem_lock("set worker status: sem_wait err");
         // change worker status
         *(int*)mem->status_ptr = 1;  // back to idle
+        mem->mem_unlock("set worker status: sem_post err");
         // clear instruction
         delete i;
       } else {
