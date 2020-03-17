@@ -44,6 +44,21 @@ INSTR_T instr_map(int idx) {
   };
 };
 
+int reverse_map(INSTR_T t) {
+  switch (t) {
+    case SET_EFA_ADDR:
+      return 1;
+    case RECV_INSTR:
+      return 2;
+    case SEND_INSTR:
+      return 3;
+    case RECV_PARAM:
+      return 4;
+    case SEND_PARAM:
+      return 5;
+  };
+};
+
 class WorkerMemory {
  public:
   // 12 + 64 Bytes: 8 bytes for timestamp;

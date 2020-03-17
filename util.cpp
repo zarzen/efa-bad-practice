@@ -45,4 +45,9 @@ void put_tasks(std::queue<Tasks *> *q, std::mutex *m, Tasks *t) {
   q->emplace(t);
 };
 
+double time_now() {
+  auto t = std::chrono::high_resolution_clock::now();
+  return t.time_since_epoch().count() / 1e9; // convert to seconds
+};
+
 }; // namespace trans

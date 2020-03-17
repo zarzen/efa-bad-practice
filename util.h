@@ -36,7 +36,7 @@ public:
 };
 
 void put_tasks(std::queue<Tasks *> *q, std::mutex *m, Tasks *t);
-
+double time_now();
 }; // namespace trans
 
 #endif
