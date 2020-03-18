@@ -12,9 +12,12 @@ void cli_efa_addr_exchange(std::string& ip,
                            std::string& port,
                            std::vector<shm::WorkerMemory*>& workers) {
   trans::SockCli cli(ip, port);
+  std::cout << "socket cli connected to server send local addr to remote\n";
   for (int i = 0; i < workers.size(); i++) {
     char add_buf[64];
+    workers[i]->print_sem_mutex_val();
     get_worker_efa_addr(workers[i], add_buf);
+    std::cout << "cli got local efa addr\n";
     cli._send(add_buf, 64);
   }
 
@@ -35,9 +38,8 @@ void put_efa_send_instr(shm::WorkerMemory* w) {
   *(int*)((char*)w->instr_ptr + 8) = shm::reverse_map(shm::SEND_INSTR);
   std::string req_msg = "<fake-request-for-parameters>";
   memcpy((char*)w->instr_ptr + 12, req_msg.c_str(), req_msg.length());
-  double ts = trans::time_now();
-  *((double*)(w->instr_ptr)) = ts;
-
+  *((double*)(w->instr_ptr)) = trans::time_now();
+  std::cout << "fake request " << req_msg << "\n";
   w->mem_unlock("efa send request, unlock err");
 };
 
@@ -58,35 +60,43 @@ void fake_param_trans(std::vector<shm::WorkerMemory*>& workers) {
 
   // set fake request
   int cur_cntr = get_worker_cntr(workers[cur_w]);
+  std::cout << "cur cntr " << cur_cntr << "\n";
   put_efa_send_instr(workers[cur_w]);
+  std::cout << "send a fake request\n";
   // wait
-  while (get_worker_status(workers[cur_w]) != 1 &&
+  while (get_worker_status(workers[cur_w]) != 1 ||
          get_worker_cntr(workers[cur_w]) != cur_cntr + 1) {
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
+  cur_cntr = get_worker_cntr(workers[cur_w]);
+
+
   double st = trans::time_now();
+  int total_cur_cntr = 0;
+  for (int i = 0; i < n_w; i++) {
+    total_cur_cntr += get_worker_cntr(workers[i]);
+  }
+  int target_cntr = total_cur_cntr + n_w * 20; // 100MB/5MB
   // start receive
   for (int i = 0; i < n_w; i++) {
-    shm::WorkerMemory* w = workers[i];
-    put_efa_recv_params(w);
+    put_efa_recv_params(workers[i]);
   }
 
   while (1) {
-    bool all_done = true;
+    int progress_cntr = 0;
     for (int i = 0; i < n_w; i++) {
       shm::WorkerMemory* w = workers[i];
-      if (get_worker_status(w) != 1) {
-        all_done = false;
-      }
+      progress_cntr += get_worker_cntr(w);
     }
-    if (all_done)
+    if (progress_cntr == target_cntr)
       break;
     else
       std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
   double et = trans::time_now();
-  double bw = (200 * 1024 * 1024 * 8 / (et - st)) / 1e9;
-  std::cout << "Recv params bw: " << bw << " Gbps\n";
+  double bw = (workers.size() *100 * 1024 * 1024 * 8 / (et - st)) / 1e9;
+  std::cout << "Recv params bw: " << bw << " Gbps\n"
+            << "dur: " << et - st << " s\n";
 };
 
 int main(int argc, char* argv[]) {
@@ -112,6 +122,8 @@ int main(int argc, char* argv[]) {
   // make sure addrs inserted
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  fake_param_trans(sharedWorkers);
+  for (int i = 0; i < 5; i++) {
+    fake_param_trans(sharedWorkers);
+  }
   // delete workers memory
 }

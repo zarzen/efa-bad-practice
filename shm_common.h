@@ -108,10 +108,11 @@ class WorkerMemory {
     shm_data_buf = std::string(prefix + "-data-buf-mem");
     shm_efa_addr = std::string(prefix + "-efa-addr-mem");
     shm_w_status = std::string(prefix + "-worker-status-mem");
-    shm_mutex_name = std::string(prefix + "-mem-mutex");
+    shm_mutex_name = std::string("/" + prefix + "-mem-mutex");
     this->create_shm(truncate);
     // create lock
-    sem_mutex = sem_open(shm_mutex_name.c_str(), O_CREAT);
+    sem_mutex = sem_open(shm_mutex_name.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 1);
+    this->print_sem_mutex_val();
   };
 
   void create_shm(bool truncate) {
@@ -154,6 +155,18 @@ class WorkerMemory {
     check_err(sem_post(sem_mutex) < 0, msg_if_err);
   };
 
+  void print_sem_mutex_val(){
+    int v;
+    sem_getvalue(sem_mutex, &v);
+    std::cout << "sem_mutex val: " << v << "\n";
+  };
+
+  int sem_mutex_val() {
+    int v;
+    sem_getvalue(sem_mutex, &v);
+    return v;
+  };
+
   ~WorkerMemory() {
     // un map
     munmap(instr_ptr, instr_size);
@@ -180,7 +193,7 @@ class SHMWorker {
 
  public:
   SHMWorker(std::string name) {
-    efa_ep = new EFAEndpoint((this->name + "-efa-ep"));
+    efa_ep = new EFAEndpoint(this->name + "-efa-ep");
     mem = new WorkerMemory(name, true);
     this->name = name;
     this->set_local_efa_addr(efa_ep);
@@ -192,21 +205,21 @@ class SHMWorker {
     mem->mem_lock("read_instr: sem_wait err");
     // read first 8 bytes for time stamp
     double ts = *((double*)mem->instr_ptr);
+    Instruction* i = NULL;
     if (ts == 0) {
-      return NULL;
     } else {
-      Instruction* i = new Instruction();
+      i = new Instruction();
       i->timestamp = ts;
       // start from 9th byte to 12th stand for instr
       INSTR_T i_type = instr_map(*((int*)((char*)mem->instr_ptr + 8)));
       i->type = i_type;
       i->data = ((char*)mem->instr_ptr) + 12;
-
       // wipe first 12 bytes to inidicate message already read
       std::fill_n((char*)mem->instr_ptr, 12, 0);
-      return i;
     }
     mem->mem_unlock("read_instr: sem_post err");
+    // mem->print_sem_mutex_val();
+    return i;
   };
 
   void set_local_efa_addr(EFAEndpoint* efa) {
@@ -220,6 +233,7 @@ class SHMWorker {
     mem->mem_lock("set_local_efa_addr: sem_wait err");
     std::memcpy(mem->efa_add_ptr, local_ep_addrs, mem->efa_addr_size);
     mem->mem_unlock("set_local_efa_addr: sem_post err");
+    mem->print_sem_mutex_val();
   };
 
   /* insert remote efa addr into address vector */
@@ -248,7 +262,9 @@ class SHMWorker {
     } else {
       fi_recv(efa->ep, mem->data_buf_ptr, 64, NULL, FI_ADDR_UNSPEC, NULL);
       wait_cq(efa->rxcq, 1);
-      std::cout << name << ": efa recv msg: " << mem->data_buf_ptr << "\n";
+      char _msg[64] = {0};
+      memcpy(_msg, mem->data_buf_ptr, 64);
+      std::cout << name << ": efa recv msg: " << _msg << "\n";
     }
 
     mem->mem_lock("efa_send_recv_instr: increase cntr sem_wait err");
@@ -262,7 +278,7 @@ class SHMWorker {
   void efa_send_recv_param(EFAEndpoint* efa, Instruction* i, bool is_send) {
     int total_size = 100 * 1024 * 1024;  // 100 MB
     int batch_p_size = 5 * 1024 * 1024;  // 5 MB
-
+    double _st = time_now();
     if (is_send) {
       for (int i = 0; i < total_size / batch_p_size; ++i) {
         char* _buf_s = ((char*)mem->data_buf_ptr) + i * batch_p_size;
@@ -278,6 +294,8 @@ class SHMWorker {
       // wait for receive queue
       wait_cq(efa->rxcq, total_size / batch_p_size);
     }
+    std::cout << "send/recv params cost: " << time_now() - _st << "\n";
+
     mem->mem_lock("efa_send_recv_param: increase cntr sem_wait err");
     // increase the counter; later can modify to progressively increase
     (*(int*)mem->cntr_ptr) += total_size / batch_p_size;
@@ -289,24 +307,30 @@ class SHMWorker {
     while (1) {
       Instruction* i = read_instr();
       if (i) {
+        std::cout << "instr type " << i->type << "\n";
         mem->mem_lock("set worker status: sem_wait err");
         // set worker status as working
         *(int*)mem->status_ptr = 2;
         mem->mem_unlock("set worker status: sem_post err");
         switch (i->type) {
           case SET_EFA_ADDR:
+            std::cout << "task for set efa addr\n";
             this->set_remote_efa_addr(efa_ep, i);
             break;
           case RECV_INSTR:
+            std::cout << "task for receive efa instr\n";
             this->efa_send_recv_instr(efa_ep, i, false);
             break;
           case SEND_INSTR:
+            std::cout << "task for send efa instr\n";
             this->efa_send_recv_instr(efa_ep, i, true);
             break;
           case RECV_PARAM:
+            std::cout << "task RECV_PARAM\n";
             this->efa_send_recv_param(efa_ep, i, false);
             break;
           case SEND_PARAM:
+            std::cout << "task SEND_PARAM\n";
             this->efa_send_recv_param(efa_ep, i, true);
             break;
           case ERR_INSTR:
