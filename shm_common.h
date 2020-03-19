@@ -16,6 +16,10 @@
 #include "efa_ep.h"
 #include "util.h"
 
+const int INSTR_OFFSET = 12;
+const int INSTR_SIZE = 2048;
+const int INSTR_DATA_SIZE = INSTR_SIZE - INSTR_OFFSET;
+
 void check_err(bool cond, std::string msg) {
   if (cond) {
     std::cerr << msg;
@@ -25,20 +29,23 @@ void check_err(bool cond, std::string msg) {
 namespace trans {
 namespace shm {
 
+
 enum INSTR_T {
   ERR_INSTR,
   SET_EFA_ADDR,
   RECV_INSTR,
   SEND_INSTR,
   RECV_PARAM,
-  SEND_PARAM
+  SEND_PARAM,
+  RECV_BATCH,
+  SEND_BATCH
 };
 
 class Instruction {
  public:
   INSTR_T type;
   double timestamp;
-  char data[500] = {0};
+  char data[INSTR_DATA_SIZE] = {0};
   Instruction(){};
 };
 
@@ -54,6 +61,10 @@ INSTR_T instr_map(int idx) {
       return RECV_PARAM;
     case 5:
       return SEND_PARAM;
+    case 6:
+      return RECV_BATCH;
+    case 7:
+      return SEND_BATCH;
     default:
       return ERR_INSTR;
   };
@@ -71,6 +82,10 @@ int reverse_map(INSTR_T t) {
       return 4;
     case SEND_PARAM:
       return 5;
+    case RECV_BATCH:
+      return 6;
+    case SEND_BATCH:
+      return 7;
     default:
       return -1;
   };
@@ -78,10 +93,9 @@ int reverse_map(INSTR_T t) {
 
 class WorkerMemory {
  public:
-  // 12 + 500 Bytes:
   // 8 bytes for timestamp;
   // 4 bytes for instr-code; the remaining bytes for instr data
-  int instr_size = 512;
+  int instr_size = INSTR_SIZE;
   int efa_addr_size = 64;
   int cntr_size = 4;                     // 4 Bytes
   int status_size = 4;                   // indicate the status of worker
@@ -232,7 +246,7 @@ class SHMWorker {
   SHMWorker(std::string name,
             int rank,
             unsigned long long int shared_data_size) {
-    efa_ep = new EFAEndpoint(this->name + "-efa-ep");
+    efa_ep = new EFAEndpoint(this->name + "-efa-ep-" + std::to_string(rank));
     mem = new WorkerMemory(name, rank, shared_data_size);
     this->name = name;
     this->set_local_efa_addr(efa_ep);
@@ -252,9 +266,9 @@ class SHMWorker {
       // start from 9th byte to 12th stand for instr
       INSTR_T i_type = instr_map(*((int*)((char*)mem->instr_ptr + 8)));
       i->type = i_type;
-      memcpy(i->data, ((char*)mem->instr_ptr) + 12, 500);
+      memcpy(i->data, ((char*)mem->instr_ptr) + INSTR_OFFSET, mem->instr_size - INSTR_OFFSET);
       // wipe first 12 bytes to inidicate message already read
-      std::fill_n((char*)mem->instr_ptr, 12, 0);
+      std::fill_n((char*)mem->instr_ptr, INSTR_OFFSET, 0);
     }
     mem->mem_unlock(mem->sem_instr, "read_instr: sem_post err");
     // mem->print_sem_mutex_val();
@@ -273,6 +287,38 @@ class SHMWorker {
     std::memcpy(mem->efa_add_ptr, local_ep_addrs, mem->efa_addr_size);
     mem->mem_unlock(mem->sem_efa_addr, "set_local_efa_addr: sem_post err");
     mem->print_sem_mutex_val(mem->sem_efa_addr);
+  };
+
+  void _wait_cq(fid_cq* cq, int count) {
+    struct fi_cq_err_entry entry;
+    int ret, completed = 0;
+    double s = time_now();
+    while (completed < count) {
+      ret = fi_cq_read(cq, &entry, 1);
+      if (ret == -FI_EAGAIN) {
+        continue;
+      }
+
+      if (ret == -FI_EAVAIL) {
+        ret = fi_cq_readerr(cq, &entry, 1);
+        CHK_ERR("fi_cq_readerr", (ret != 1), ret);
+
+        printf("Completion with error: %d\n", entry.err);
+        // if (entry.err == FI_EADDRNOTAVAIL)
+        // 	get_peer_addr(entry.err_data);
+      }
+
+      CHK_ERR("fi_cq_read ????", (ret < 0), ret);
+      completed++;
+      // update worker mem cntr
+      mem->mem_lock(mem->sem_cntr, "sem cntr lock, err\n");
+      (*(int*)mem->cntr_ptr) += 1;
+      mem->mem_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
+
+      double cost_t = time_now() - s;
+      std::cout << completed << " job cost : " << cost_t * 1e3 << " ms\n";
+      s = time_now();  // update start time
+    }
   };
 
   /* insert remote efa addr into address vector */
@@ -295,11 +341,11 @@ class SHMWorker {
   void efa_send_recv_instr(EFAEndpoint* efa, Instruction* i, bool is_send) {
     if (is_send) {
       fi_send(efa->ep, i->data, 64, NULL, efa->peer_addr, NULL);
-      wait_cq(efa->txcq, 1);
+      this->_wait_cq(efa->txcq, 1);
       std::cout << name << ": efa send msg: " << i->data << "\n";
     } else {
       fi_recv(efa->ep, mem->data_buf_ptr, 64, NULL, FI_ADDR_UNSPEC, NULL);
-      wait_cq(efa->rxcq, 1);
+      this->_wait_cq(efa->rxcq, 1);
       char _msg[64] = {0};
       memcpy(_msg, mem->data_buf_ptr, 64);
       std::cout << name << ": efa recv msg: " << _msg << "\n";
@@ -315,7 +361,7 @@ class SHMWorker {
   /* assume the worker stores the partition of the parameters
     currently, simplest 5MB for each batch with 200MB total
   */
-  void efa_send_recv_param(EFAEndpoint* efa, Instruction* i, bool is_send) {
+  void efa_send_recv_fake_param(EFAEndpoint* efa, Instruction* i, bool is_send) {
     int total_size = 100 * 1024 * 1024;  // 100 MB
     int batch_p_size = 5 * 1024 * 1024;  // 5 MB
     double _st = time_now();
@@ -325,14 +371,14 @@ class SHMWorker {
         fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
       }
       // wait for transition queue
-      wait_cq(efa->txcq, total_size / batch_p_size);
+      this->_wait_cq(efa->txcq, total_size / batch_p_size);
     } else {
       for (int i = 0; i < total_size / batch_p_size; ++i) {
         char* _buf_s = ((char*)mem->data_buf_ptr) + i * batch_p_size;
         fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
       }
       // wait for receive queue
-      wait_cq(efa->rxcq, total_size / batch_p_size);
+      this->_wait_cq(efa->rxcq, total_size / batch_p_size);
     }
     std::cout << "send/recv params cost: " << time_now() - _st << "\n";
 
@@ -343,6 +389,27 @@ class SHMWorker {
     mem->mem_unlock(mem->sem_cntr,
                     "efa_send_recv_param: increase cntr sem_post err");
   }
+
+  void efa_send_recv_batch(EFAEndpoint* efa, Instruction* instr) {
+    int batch_n = *(int*)instr->data; // 4 bytes for number of batches
+    // the rest of them: 8 bytes for offset; 4 bytes for size
+    for (int i = 0; i < batch_n; i++) {
+      unsigned long long int offset = *(unsigned long long int*)((instr->data) + 4 + 12 * i);
+      unsigned int batch_p_size = *(unsigned int*)((instr->data) + 4 + 12 * i + 8);
+
+      char* _buf_s = (char*)mem->data_buf_ptr + offset;
+      if (instr->type == SEND_BATCH) {
+        fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+      } else {
+        fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
+      }
+    }
+    if (instr->type == SEND_BATCH) {
+      this->_wait_cq(efa->txcq, batch_n);
+    } else {
+      this->_wait_cq(efa->rxcq, batch_n);
+    }
+  };
 
   // main function of the shm worker
   void run() {
@@ -369,12 +436,16 @@ class SHMWorker {
             break;
           case RECV_PARAM:
             std::cout << "task RECV_PARAM\n";
-            this->efa_send_recv_param(efa_ep, i, false);
+            this->efa_send_recv_fake_param(efa_ep, i, false);
             break;
           case SEND_PARAM:
             std::cout << "task SEND_PARAM\n";
-            this->efa_send_recv_param(efa_ep, i, true);
+            this->efa_send_recv_fake_param(efa_ep, i, true);
             break;
+          case SEND_BATCH:
+          case RECV_BATCH:
+            std::cout << "task SEND_BATCH/RECV_BATCH \n";
+            this->efa_send_recv_batch(efa_ep, i);
           case ERR_INSTR:
             std::cerr << "err instr encountered \n";
             break;
