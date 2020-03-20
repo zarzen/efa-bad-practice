@@ -25,7 +25,7 @@ void check_err(bool cond, std::string msg) {
 };
 
 const int INSTR_OFFSET = 12;
-const int INSTR_SIZE = 2048;
+const int INSTR_SIZE = 10 * 1024;
 const int INSTR_DATA_SIZE = INSTR_SIZE - INSTR_OFFSET;
 const int EFA_ADDR_SIZE = 64;
 const int CNTR_SIZE = 4;
@@ -630,7 +630,8 @@ class SHMCommunicator {
             size_t _size = *(size_t*)(instr->data + 4 + j * 16 + 8);
             *(unsigned long long*)(_w_instr_data_p + 4 + w_t_c * 16) = _offset;
             *(size_t*)(_w_instr_data_p + 4 + w_t_c * 16 + 8) = _size;
-            std::cout << "offset: " << _offset << ", size: " << _size << "\n";
+            std::cout << "offset: " << _offset << ", size: " << _size 
+                      << "(" << i << ", " << j << ") \n";
             // worker task counter ++
             w_t_c++;
           }
