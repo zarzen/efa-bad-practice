@@ -678,7 +678,7 @@ class SHMCommunicator {
       memcpy(i->data, (char*)comm_instr_ptr + INSTR_OFFSET,
              INSTR_SIZE - INSTR_OFFSET);
       // clear mem
-      std::fill_n(comm_instr_ptr, INSTR_SIZE, 0);
+      std::fill_n((char*)comm_instr_ptr, INSTR_SIZE, 0);
     }
     shm_unlock(mtx_comm_instr, "unlock err, after reading intrs\n");
     return i;
