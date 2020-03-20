@@ -332,9 +332,9 @@ class SHMWorker {
     // the rest of them: 8 bytes for offset; 4 bytes for size
     for (int i = 0; i < batch_n; i++) {
       unsigned long long int offset =
-          *(unsigned long long int*)((instr->data) + 4 + 12 * i);
-      unsigned int batch_p_size =
-          *(unsigned int*)((instr->data) + 4 + 12 * i + 8);
+          *(unsigned long long int*)((instr->data) + 4 + 16 * i);
+      size_t batch_p_size =
+          *(size_t*)((instr->data) + 4 + 16 * i + 8);
 
       char* _buf_s = (char*)mem->data_buf_ptr + offset;
       if (instr->type == SEND_BATCH) {
@@ -626,10 +626,10 @@ class SHMCommunicator {
         for (int j = 0; j < n_batches; j++) {
           if (j % nw == i) {
             unsigned long long _offset =
-                *(unsigned long long*)(instr->data + 4 + j * 12);
-            int _size = *(int*)(instr->data + 4 + j * 12 + 8);
-            *(unsigned long long*)(_w_instr_data_p + 4 + w_t_c * 12) = _offset;
-            *(int*)(_w_instr_data_p + 4 + w_t_c * 12 + 8) = _size;
+                *(unsigned long long*)(instr->data + 4 + j * 16);
+            size_t _size = *(size_t*)(instr->data + 4 + j * 16 + 8);
+            *(unsigned long long*)(_w_instr_data_p + 4 + w_t_c * 16) = _offset;
+            *(size_t*)(_w_instr_data_p + 4 + w_t_c * 16 + 8) = _size;
             std::cout << "offset: " << _offset << ", size: " << _size << "\n";
             // worker task counter ++
             w_t_c++;
