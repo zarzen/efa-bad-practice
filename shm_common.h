@@ -571,6 +571,7 @@ class SHMCommunicator {
     }
   }
 
+  /* the addrs_buf contains addresses for all workers */
   void set_local_peer_addrs(char* addrs_buf) {
     for (int i = 0; i < nw; ++i) {
       shm_lock(mtxs_instr[i], "lock instr, while setting peer addr\n");
@@ -587,14 +588,14 @@ class SHMCommunicator {
     int _cntr = 0;
     for (int i = 0; i < nw; ++i) {
       shm_lock(mtxs_cntr[i], "lock while getting cntr, err\n");
-      cntrs[i] = *(int*)(ws_cntr_ptr + i * CNTR_SIZE);
+      cntrs[i] = *(int*)((char*)ws_cntr_ptr + i * CNTR_SIZE);
       shm_unlock(mtxs_cntr[i], "unlock while getting cntr, err\n");
     }
   }
 
   int get_a_worker_cntr(int widx) {
     shm_lock(mtxs_cntr[widx], "lock err, while getting cntr");
-    int w_cntr = *(int*)(ws_cntr_ptr + widx * CNTR_SIZE);
+    int w_cntr = *(int*)((char*)ws_cntr_ptr + widx * CNTR_SIZE);
     shm_unlock(mtxs_cntr[widx], "unlock err, while getting cntr");
     return w_cntr;
   }
