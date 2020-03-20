@@ -18,7 +18,7 @@ void init_shm_sem(std::string& shm_prefix, size_t data_buf_size) {
   std::string sem_comm_cntr("/" + shm_prefix + "-comm-cntr-mtx");
 
   // open shm and map it
-  int data_buf_fd = shm_open(shm_prefix.c_str(), O_RDWR, 0666);
+  int data_buf_fd = shm_open(shm_data_buf.c_str(), O_RDWR, 0666);
   int instr_fd = shm_open(shm_comm_instr.c_str(), O_RDWR, 0666);
   int cntr_fd = shm_open(shm_comm_cntr.c_str(), O_RDWR, 0666);
   data_buf_ptr =
@@ -48,6 +48,8 @@ int main(int argc, char* argv[]) {
   }
   std::string shm_prefix(argv[1]);
   size_t data_size = std::stoull(argv[2]);
+
+  init_shm_sem(shm_prefix, data_size);
   
   int cur_cntr = get_comm_cntr();
   // put send instr
@@ -67,7 +69,7 @@ int main(int argc, char* argv[]) {
   }
 
   // output data
-  std::cout << "recv msg: " << data_buf_ptr << "\n";
+  std::cout << "recv msg: " << (char*)data_buf_ptr << "\n";
 
   return 0;
 }

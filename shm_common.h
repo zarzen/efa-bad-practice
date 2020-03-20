@@ -369,6 +369,7 @@ class SHMWorker {
           case RECV_BATCH:
             std::cout << "task SEND_BATCH/RECV_BATCH \n";
             this->efa_send_recv_batch(efa_ep, i);
+            break;
           case ERR_INSTR:
             std::cerr << "err instr encountered \n";
             break;
@@ -624,12 +625,14 @@ class SHMCommunicator {
         // fill instruction data part
         for (int j = 0; j < n_batches; j++) {
           if (j % nw == i) {
-            w_t_c++;
             unsigned long long _offset =
                 *(unsigned long long*)(instr->data + 4 + j * 12);
             int _size = *(int*)(instr->data + 4 + j * 12 + 8);
             *(unsigned long long*)(_w_instr_data_p + 4 + w_t_c * 12) = _offset;
             *(int*)(_w_instr_data_p + 4 + w_t_c * 12 + 8) = _size;
+            std::cout << "offset: " << _offset << ", size: " << _size << "\n";
+            // worker task counter ++
+            w_t_c++;
           }
         }
         // first 4 bytes for task count
@@ -674,6 +677,8 @@ class SHMCommunicator {
     double ts = *(double*)comm_instr_ptr;
     if (ts != 0) {
       i = new Instruction();
+      INSTR_T i_type = instr_map(*((int*)((char*)comm_instr_ptr + 8)));
+      i->type = i_type;
       i->timestamp = ts;
       memcpy(i->data, (char*)comm_instr_ptr + INSTR_OFFSET,
              INSTR_SIZE - INSTR_OFFSET);

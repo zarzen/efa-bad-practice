@@ -5,6 +5,48 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "shm-worker",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Debug/shm_worker",
+      "args": ["efa-client", "0", "524288000"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "debug-build",
+      "miDebuggerPath": "/usr/bin/gdb"
+    },
+    {
+      "name": "shm-demo-cli",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Debug/shm_demo_cli",
+      "args": ["efa-client", "524288000"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "debug-build",
+      "miDebuggerPath": "/usr/bin/gdb"
+    },
+    {
       "name": "shm_cli-debug",
       "type": "cppdbg",
       "request": "launch",
