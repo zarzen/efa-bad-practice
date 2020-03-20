@@ -688,6 +688,7 @@ class SHMCommunicator {
     while (1) {
       Instruction* i = _read_instr();
       if (i) {
+        std::cout << "received a job \n";
         switch (i->type) {
           case SEND_BATCH:
           case RECV_BATCH:
