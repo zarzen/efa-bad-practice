@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
   // put instr data
   *(int*)((char*)comm_instr_ptr + 12) = 1; // n batch
   *(size_t*)((char*)comm_instr_ptr + 12 + 4) = 0; // offset
-  *(int*)((char*)comm_instr_ptr + 12 + 4 + 8) = 64; // size
+  *(size_t*)((char*)comm_instr_ptr + 12 + 4 + 8) = 64; // size
   // put timestamp
   *(double*)comm_instr_ptr = trans::time_now();
   trans::shm::shm_unlock(mtx_comm_instr, "unlock err, after putting the send request ");
@@ -70,6 +70,35 @@ int main(int argc, char* argv[]) {
   while (get_comm_cntr() != cur_cntr + 1) {
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
+
+  double s = trans::time_now();
+  std::cout << "time now: " << s << "\n";
+  cur_cntr = get_comm_cntr();
+  size_t batch_p_size = 5 * 1024 * 1024;
+  size_t total_p_size = 200 * 1024 * 1024;
+  // send batch parameters
+  trans::shm::shm_lock(mtx_comm_instr, "lock err, while put instr");
+  // put operation code
+  *(int*)((char*)comm_instr_ptr + 8) = trans::shm::reverse_map(trans::shm::RECV_BATCH);
+  *(int*)((char*)comm_instr_ptr + 12) = (int) total_p_size / batch_p_size;
+  // each offset and size
+  char* _offsets_sizes_s = (char*)comm_instr_ptr + 12 + 4;
+  for (int i =0; i < total_p_size / batch_p_size; i++) {
+    size_t _offset = batch_p_size * i;
+    *(size_t*)(_offsets_sizes_s + i * 16) = _offset;
+    *(size_t*)(_offsets_sizes_s + i * 16 + 8) = batch_p_size;
+  }
+  // put timestamp
+  *(double*)comm_instr_ptr = trans::time_now();
+  trans::shm::shm_unlock(mtx_comm_instr, "unlock err, after putting the send request ");
+
+  // wait completion
+  while (get_comm_cntr() != cur_cntr + total_p_size / batch_p_size) {
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  double dur = trans::time_now() - s;
+  double bw = ((total_p_size * 8) / dur) / 1e9;
+  std::cout << "bw: " << bw << " Gbps; " << " dur: " << dur << "\n";
 
   return 0;
 }
