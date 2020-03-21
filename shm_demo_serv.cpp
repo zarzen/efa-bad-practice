@@ -42,15 +42,7 @@ int get_comm_cntr() {
   return _c;
 }
 
-int main(int argc, char* argv[]) {
-  if (argc < 3) {
-    std::cout << "Usage: ./shm_demo_cli <shm-prefix> <data-buf-size>\n";
-  }
-  std::string shm_prefix(argv[1]);
-  size_t data_size = std::stoull(argv[2]);
-
-  init_shm_sem(shm_prefix, data_size);
-  
+void serv_fake_trans() {
   int cur_cntr = get_comm_cntr();
   // put send instr
   trans::shm::shm_lock(mtx_comm_instr, "lock err, while put instr");
@@ -99,5 +91,20 @@ int main(int argc, char* argv[]) {
   double dur = trans::time_now() - s;
   double bw = ((total_p_size * 8) / dur) / 1e9;
   std::cout << "bw: " << bw << " Gbps; " << " dur: " << dur << "\n";
+}
+
+int main(int argc, char* argv[]) {
+  if (argc < 3) {
+    std::cout << "Usage: ./shm_demo_cli <shm-prefix> <data-buf-size>\n";
+  }
+  std::string shm_prefix(argv[1]);
+  size_t data_size = std::stoull(argv[2]);
+
+  init_shm_sem(shm_prefix, data_size);
+  
+  int repeat_n = 10;
+  for (int i = 0; i < repeat_n; i++) {
+    serv_fake_trans();
+  }
   return 0;
 }
