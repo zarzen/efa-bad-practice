@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
   std::string shm_prefix(argv[1]);
   int nw = std::stoi(argv[2]);
   int rank = std::atoi(argv[3]);
-  unsigned long long int data_buf_size = std::stoull(argv[3]);
+  unsigned long long int data_buf_size = std::stoull(argv[4]);
   shm::SHMWorker w(shm_prefix, nw, rank, data_buf_size);
   w.run();
 
