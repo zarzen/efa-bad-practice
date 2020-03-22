@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "shm-worker",
+      "name": "test_p_serv",
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/Debug/test_p_serv",
@@ -30,7 +30,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/Debug/shm_worker",
-      "args": ["efa-client", "0", "524288000"],
+      "args": ["efa-server", "3", "2", "1000000000"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],

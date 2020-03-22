@@ -24,6 +24,16 @@ void check_err(bool cond, std::string msg) {
   }
 };
 
+bool check_all_zero(char* buf, size_t size) {
+  bool flg = true;
+  for (int i = 0; i < size; i++) {
+    if (*(buf + i) != 0) {
+      flg = false;
+    }
+  }
+  return flg;
+};
+
 const int INSTR_OFFSET = 12;
 const int INSTR_SIZE = 10 * 1024;
 const int INSTR_DATA_SIZE = INSTR_SIZE - INSTR_OFFSET;
@@ -110,6 +120,7 @@ class WorkerMemory {
   unsigned long long int data_buf_size;  // input from user
   // based on rank to move the pointer of instr, efa_addr, cntr, status
   int rank;
+  int nw; // number of workers
 
   // shm identifiers
   std::string shm_instr;
@@ -140,10 +151,12 @@ class WorkerMemory {
   void* status_ptr;  // 1: idle; 2: working;
 
   /* rank start from 0
+    nw: total workers
    */
-  WorkerMemory(std::string prefix, int rank, unsigned long long int data_size) {
+  WorkerMemory(std::string prefix, int nw, int rank, unsigned long long int data_size) {
     data_buf_size = data_size;
     this->rank = rank;
+    this->nw = nw;
 
     shm_instr = std::string(prefix + SHM_SUFFIX_INSTR);        // instruction
     shm_cntr = std::string(prefix + SHM_SUFFIX_CNTR);          // counter
@@ -175,20 +188,26 @@ class WorkerMemory {
     int worker_status_fd = shm_open(shm_w_status.c_str(), O_RDWR, 0666);
     // map memory pointer
     instr_ptr =
-        mmap(0, instr_size, PROT_READ | PROT_WRITE, MAP_SHARED, instr_fd, 0);
+        mmap(0, nw * INSTR_SIZE , PROT_READ | PROT_WRITE, MAP_SHARED, instr_fd, 0);
     cntr_ptr =
-        mmap(0, cntr_size, PROT_READ | PROT_WRITE, MAP_SHARED, cntr_fd, 0);
-    efa_add_ptr = mmap(0, efa_addr_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+        mmap(0, nw * CNTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, cntr_fd, 0);
+    efa_add_ptr = mmap(0, nw * EFA_ADDR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
                        efa_add_fd, 0);
-    status_ptr = mmap(0, status_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+    status_ptr = mmap(0, nw * STATUS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
                       worker_status_fd, 0);
     data_buf_ptr = mmap(0, data_buf_size, PROT_READ | PROT_WRITE, MAP_SHARED,
                         data_buf_fd, 0);
     // move the pointer
-    instr_ptr = (void*)((char*)instr_ptr + this->rank * instr_size);
+    instr_ptr = (void*)((char*)instr_ptr + (this->rank * instr_size));
     cntr_ptr = (void*)((char*)cntr_ptr + this->rank * cntr_size);
     efa_add_ptr = (void*)((char*)efa_add_ptr + this->rank * efa_addr_size);
     status_ptr = (void*)((char*)status_ptr + this->rank * status_size);
+    
+    std::cout << "garbe at instr_ptr " << (char*) instr_ptr << "\n";
+    // check memory all zeros
+    std::cout << "instr memory all zeros: " 
+              << check_all_zero((char*)instr_ptr, instr_size)
+              << "\n";
 
     // open mutexs
     // controller will create the semaphore
@@ -232,10 +251,11 @@ class SHMWorker {
 
  public:
   SHMWorker(std::string name,
+            int nw,
             int rank,
             unsigned long long int shared_data_size) {
     efa_ep = new EFAEndpoint(this->name + "-efa-ep-" + std::to_string(rank));
-    mem = new WorkerMemory(name, rank, shared_data_size);
+    mem = new WorkerMemory(name, nw, rank, shared_data_size);
     this->name = name;
     this->set_local_efa_addr(efa_ep);
     // init worker status
@@ -355,8 +375,9 @@ class SHMWorker {
     while (1) {
       Instruction* i = read_instr();
       if (i) {
-        std::cout << "instr type " << i->type << "\n";
         shm_lock(mem->sem_w_status, "set worker status: sem_wait err");
+        std::cout << "instr type " << i->type << "\n";
+
         // set worker status as working
         *(int*)mem->status_ptr = 2;
         shm_unlock(mem->sem_w_status, "set worker status: sem_post err");
@@ -478,7 +499,9 @@ class SHMCommunicator {
                          MAP_SHARED, worker_status_fd, 0);
     data_buf_ptr = mmap(0, data_buf_size, PROT_READ | PROT_WRITE, MAP_SHARED,
                         data_buf_fd, 0);
-
+    // set memory to all zero
+    std::fill_n((char*)ws_instr_ptr, INSTR_SIZE * nw, 0);
+    std::cout << "created instruction memory size: " << INSTR_SIZE * nw << "\n";
     // ------------ workers shm part end
 
     // ------------ workers semaphore part
