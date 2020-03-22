@@ -56,32 +56,6 @@ message(${LIBFABRIC_INCLUDE_DIR})
 message( ${LIBFABRIC_LIBRARY} )
 
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(common_files
-        efa_ep.cpp
-        worker.cpp
-        communicator.cpp
-        util.cpp
-        sock_cli_serv.cpp
-        efa_thd.cpp
-        )
-
-add_executable(bw_cli demo_cli_bw.cpp ${common_files})
-target_link_libraries(bw_cli ${LIBFABRIC_LIBRARY} pthread)
-
-add_executable(bw_serv demo_serv_bw.cpp ${common_files})
-target_link_libraries(bw_serv ${LIBFABRIC_LIBRARY} pthread)
-
-add_executable(msg_cli demo_msg_cli.cpp ${common_files})
-target_link_libraries(msg_cli ${LIBFABRIC_LIBRARY} pthread)
-
-add_executable(msg_serv demo_msg_serv.cpp ${common_files})
-target_link_libraries(msg_serv ${LIBFABRIC_LIBRARY} pthread)
-
-add_executable(nothd_cli demo_nothd_cli.cpp ${common_files})
-target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread)
-
-add_executable(nothd_serv demo_nothd_serv.cpp ${common_files})
-target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread)
 
 add_executable(shm_worker shm_worker.cpp util.cpp efa_ep.cpp)
 target_link_libraries(shm_worker ${LIBFABRIC_LIBRARY} pthread rt)
@@ -97,6 +71,12 @@ target_link_libraries(shm_demo_cli ${LIBFABRIC_LIBRARY} pthread rt)
 
 add_executable(shm_demo_serv shm_demo_serv.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
 target_link_libraries(shm_demo_serv ${LIBFABRIC_LIBRARY} pthread rt)
+
+add_executable(test_p_cli shm_demo_cli_veri.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(test_p_cli ${LIBFABRIC_LIBRARY} pthread rt)
+
+add_executable(test_p_serv shm_demo_serv_veri.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(test_p_serv ${LIBFABRIC_LIBRARY} pthread rt)
 
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
