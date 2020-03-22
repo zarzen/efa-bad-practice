@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 
 #include "shm_common.h"
 
@@ -110,6 +111,7 @@ void fake_trans(size_t total_p_size) {
 }
 
 int main(int argc, char* argv[]) {
+  std::setprecision(9);
   if (argc < 3) {
     std::cout << "Usage: ./shm_demo_cli <shm-prefix> <data-buf-size>\n";
   }
@@ -121,13 +123,14 @@ int main(int argc, char* argv[]) {
   for (auto s : p_sizes) {
     total_p_size += s;
   }
-
+  std::cout << "parameters size " << total_p_size << "\n";
   init_shm_sem(shm_prefix, data_size);
   
   int repeat_n = 10;
   for (int i = 0; i < repeat_n; i++) {
     fake_trans(total_p_size);
     bool is_same = verify_data(paramters_buf, total_p_size);
+    std::cout << "verification result " << is_same << "\n";
     wipe_shm_data_buf(data_size);
   }
 
@@ -178,11 +181,16 @@ bool verify_data(char* param_buf, size_t param_len){
     if (*(param_buf + i) != *((char*)data_buf_ptr + p_offset + i)) {
       same = false;
       break;
+    } else {
+      if (i < 10) {
+        std::cout << *((char*)data_buf_ptr + p_offset + i);
+      }
     }
   }
+  std::cout << "\n";
   return same;
 };
 
 void wipe_shm_data_buf(size_t size){
-  std::fill_n(data_buf_ptr, size, 0);
+  std::fill_n((char*)data_buf_ptr, size, 0);
 };

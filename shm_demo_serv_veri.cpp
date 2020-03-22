@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 
 #include "shm_common.h"
 
@@ -72,6 +73,7 @@ void serv_fake_trans(size_t total_p_size) {
 
   // output data
   std::cout << "recv msg: " << (char*)data_buf_ptr << "\n";
+  std::fill_n((char*)data_buf_ptr, 64, 0); // clear
 
   double s = trans::time_now();
   std::cout << "time now: " << s << "\n";
@@ -109,6 +111,7 @@ void serv_fake_trans(size_t total_p_size) {
 }
 
 int main(int argc, char* argv[]) {
+  std::setprecision(9);
   if (argc < 3) {
     std::cout << "Usage: ./shm_demo_cli <shm-prefix> <data-buf-size>\n";
   }
@@ -119,6 +122,7 @@ int main(int argc, char* argv[]) {
 
   // load data
   size_t total_p_size = load_params();
+  std::cout << "loaded paramter to send size: " << total_p_size << "\n";
 
   int repeat_n = 10;
   for (int i = 0; i < repeat_n; i++) {
