@@ -313,6 +313,9 @@ class SHMWorker {
         CHK_ERR("fi_cq_readerr", (ret != 1), ret);
 
         printf("Completion with error: %d\n", entry.err);
+        char _err_buf[100];
+        printf("!!! err: %s", fi_cq_strerror(cq, entry.prov_errno, entry.err_data, _err_buf, 100));
+        printf("%s", _err_buf);
         // if (entry.err == FI_EADDRNOTAVAIL)
         // 	get_peer_addr(entry.err_data);
       }
