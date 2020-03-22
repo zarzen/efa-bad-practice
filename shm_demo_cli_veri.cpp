@@ -111,7 +111,8 @@ void fake_trans(size_t total_p_size) {
 }
 
 int main(int argc, char* argv[]) {
-  std::setprecision(9);
+  std::cout.precision(9);
+  std::cout << std::fixed;
   if (argc < 3) {
     std::cout << "Usage: ./shm_demo_cli <shm-prefix> <data-buf-size>\n";
   }
@@ -148,7 +149,7 @@ size_t _load_to(size_t offset, std::string& filename, char* data_buf) {
 
     is.read((char*)data_buf + offset, length);
     if (is)
-      std::cout << "all characters read successfully.";
+      std::cout << "all characters read successfully.\n";
     else
       std::cout << "error: only " << is.gcount() << " could be read";
     is.close();

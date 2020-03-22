@@ -8,6 +8,27 @@
       "name": "shm-worker",
       "type": "cppdbg",
       "request": "launch",
+      "program": "${workspaceFolder}/Debug/test_p_serv",
+      "args": ["efa-server", "1000000000"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "debug-build",
+      "miDebuggerPath": "/usr/bin/gdb"
+    },
+    {
+      "name": "shm-worker",
+      "type": "cppdbg",
+      "request": "launch",
       "program": "${workspaceFolder}/Debug/shm_worker",
       "args": ["efa-client", "0", "524288000"],
       "stopAtEntry": false,
