@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <queue>
+#include <rdma/fi_tagged.h>
 
 using namespace trans;
 int batch_p_size = 1 * 1024 * 1024; // 2MB
@@ -62,13 +63,16 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
 };
 
 void fake_param_trans(trans::EFAEndpoint *efa) {
-  cli_pingpong(efa); // assume pingpong background message always exist
+  // cli_pingpong(efa); // assume pingpong background message always exist
     // send a fake request
+  int seq = 0;
   int inst_size = 64;
   std::string req_msg = "<fake-request-for-parameters>";
   memcpy(send_buf, req_msg.c_str(), req_msg.length());
 
-  fi_send(efa->ep, send_buf, inst_size, NULL, efa->peer_addr, NULL);
+  // fi_send(efa->ep, send_buf, inst_size, NULL, efa->peer_addr, NULL);
+  fi_tsend(efa->ep, send_buf, inst_size, NULL, efa->peer_addr, seq, NULL);
+  seq ++;
   wait_cq(efa->txcq, 1);
 
   // receiving tasks
@@ -78,7 +82,9 @@ void fake_param_trans(trans::EFAEndpoint *efa) {
   for (int i = 0; i < total_size/batch_p_size; ++i) {
     // char* _buf_s = p_buf + i * batch_p_size;
     // fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
-    fi_recv(efa->ep, p_buf, batch_p_size, NULL, 0, NULL);
+    // fi_recv(efa->ep, p_buf, batch_p_size, NULL, 0, NULL);
+    fi_trecv(efa->ep, p_buf, batch_p_size, NULL, efa->peer_addr, seq, 0, NULL);
+    seq += 1;
   }
 
   std::cout << "after launch fi_recv s " 

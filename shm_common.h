@@ -15,6 +15,7 @@
 
 #include "efa_ep.h"
 #include "util.h"
+#include <rdma/fi_tagged.h>
 
 namespace trans {
 namespace shm {
@@ -361,11 +362,14 @@ class SHMWorker {
 
       char* _buf_s = (char*)mem->data_buf_ptr + offset;
       if (instr->type == SEND_BATCH) {
-        fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+        // fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+        fi_tsend(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, i, NULL);
       } else {
-        fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
+        // fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
+        fi_trecv(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, i, 0, NULL);
       }
     }
+    std::cout << "launched tagged msgs \n";
     if (instr->type == SEND_BATCH) {
       this->_wait_cq(efa->txcq, batch_n);
     } else {

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <queue>
+#include <rdma/fi_tagged.h>
 
 using namespace trans;
 
@@ -87,10 +88,13 @@ void serv_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpo
 };
 
 void fake_serv_param(trans::EFAEndpoint *efa) {
-  serv_pingpong(efa); // assume pingpong background message always exist
+  // serv_pingpong(efa); // assume pingpong background message always exist
 // recv a fake request from client
+  int seq = 0;
   int inst_size = 64;
-  fi_recv(efa->ep, req_buf, inst_size, NULL, FI_ADDR_UNSPEC, NULL);
+  // fi_recv(efa->ep, req_buf, inst_size, NULL, FI_ADDR_UNSPEC, NULL);
+  fi_trecv(efa->ep, req_buf, inst_size, NULL, efa->peer_addr, seq, 0, NULL);
+  seq ++ ;
   wait_cq(efa->rxcq, 1);
   printf("Recv request msg: %s\n", req_buf);
 
@@ -99,7 +103,9 @@ void fake_serv_param(trans::EFAEndpoint *efa) {
   auto s = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < total_size / batch_p_size; ++i) {
     char* _buf_s = p_buf + i * batch_p_size;
-    fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+    // fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
+    fi_tsend(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, seq, NULL);
+    seq ++;
   }
   wait_cq(efa->txcq, total_size/batch_p_size);
 

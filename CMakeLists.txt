@@ -57,6 +57,11 @@ message( ${LIBFABRIC_LIBRARY} )
 
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_executable(nothd_cli demo_nothd_cli.cpp util.cpp efa_ep.cpp sock_cli_serv.cpp)
+target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread rt)
+add_executable(nothd_serv demo_nothd_serv.cpp util.cpp efa_ep.cpp sock_cli_serv.cpp)
+target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread rt)
+
 add_executable(shm_worker shm_worker.cpp util.cpp efa_ep.cpp)
 target_link_libraries(shm_worker ${LIBFABRIC_LIBRARY} pthread rt)
 
