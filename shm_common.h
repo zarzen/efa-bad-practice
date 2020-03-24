@@ -774,7 +774,7 @@ class SHMCommunicator {
           this->plus_one_self_cntr();
           _level ++;
           double e = time_now();
-          std::cout << "wait batch " << _level << " completion takes " << e - s << " s";
+          std::cout << "wait batch " << _level << " completion takes " << e - s << " s\n";
           s = e;
         } else {
           std::this_thread::sleep_for(std::chrono::microseconds(100));
