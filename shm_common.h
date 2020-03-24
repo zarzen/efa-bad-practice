@@ -707,8 +707,38 @@ class SHMCommunicator {
       }
 
     } else {
-      std::cerr << "splittion not implemented yet\n";
-      return;
+      for (int widx = 0; widx < nw; widx ++) {
+        char* _w_instr_p = (char*)ws_instr_ptr + widx * INSTR_SIZE;
+        char* _w_instr_data_p = _w_instr_p + INSTR_OFFSET;
+        // first 4 bytes for task count
+        *(int*)_w_instr_data_p = n_batches;
+        // assign operation type
+        if (instr->type == SEND_BATCH)
+          *(int*)(_w_instr_p + 8) = reverse_map(SEND_BATCH);
+        else
+          *(int*)(_w_instr_p + 8) = reverse_map(RECV_BATCH);
+        
+        // compute offsets and sizes
+        for (int i = 0; i < n_batches; i ++) {
+          size_t _offset =
+                *(unsigned long long*)(instr->data + 4 + i * 16);
+          size_t _size = *(size_t*)(instr->data + 4 + i * 16 + 8);
+
+          size_t _worker_size = _size / nw;
+          size_t _worker_offset = _offset + widx * _worker_size;
+
+          if (widx == nw - 1) {
+            // last worker has more responsibility
+            _worker_size += (_size - _worker_size * nw);
+          }
+          *(size_t*)(_w_instr_data_p + 4 + i * 16) = _worker_offset;
+          *(size_t*)(_w_instr_data_p + 4 + i * 16 + 8) = _worker_size;
+        }
+
+        // assign timestamp
+        *(double*)_w_instr_p = time_now();
+      }
+
     }
     // unlock all
     for (int i = 0; i < nw; i++) {
@@ -727,6 +757,28 @@ class SHMCommunicator {
         _ws_cntrs[w_idx] += 1;
         // increase self comminicator counter.
         this->plus_one_self_cntr();
+      }
+    } else {
+      double s = time_now();
+      // wait for splitting parameters case
+      int _level = 0;
+      while (_level < n_batches) {
+        bool _inc = true; // sync flag
+        for (int wid = 0; wid < nw; wid ++) {
+          if (this->get_a_worker_cntr(wid) - _ws_cntrs[wid] <= _level) {
+            _inc = false;
+          }
+        }
+
+        if (_inc) {
+          this->plus_one_self_cntr();
+          _level ++;
+          double e = time_now();
+          std::cout << "wait batch " << _level << " completion takes " << e - s << " s";
+          s = e;
+        } else {
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
       }
     }
   }
@@ -757,7 +809,7 @@ class SHMCommunicator {
         switch (i->type) {
           case SEND_BATCH:
           case RECV_BATCH:
-            this->send_recv_batch(i);
+            this->send_recv_batch(i, false);
             break;
           default:
             std::cerr << "err instr encountered \n";
