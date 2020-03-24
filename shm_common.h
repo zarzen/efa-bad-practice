@@ -323,10 +323,6 @@ class SHMWorker {
 
       CHK_ERR("fi_cq_read ????", (ret < 0), ret);
       completed++;
-      // update worker mem cntr
-      shm_lock(mem->sem_cntr, "sem cntr lock, err\n");
-      (*(int*)mem->cntr_ptr) += 1;
-      shm_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
 
       double cost_t = time_now() - s;
       std::cout << completed << " job cost : " << cost_t * 1e3 << " ms\n";
@@ -353,28 +349,61 @@ class SHMWorker {
 
   void efa_send_recv_batch(EFAEndpoint* efa, Instruction* instr) {
     int batch_n = *(int*)instr->data;  // 4 bytes for number of batches
+    int* wait_sizes = new int[batch_n];
+    size_t slice_threshold = 4 * 1024 * 1024; // 4MB
+    int task_seq = 0;
     // the rest of them: 8 bytes for offset; 4 bytes for size
     for (int i = 0; i < batch_n; i++) {
       unsigned long long int offset =
           *(unsigned long long int*)((instr->data) + 4 + 16 * i);
       size_t batch_p_size =
           *(size_t*)((instr->data) + 4 + 16 * i + 8);
-
-      char* _buf_s = (char*)mem->data_buf_ptr + offset;
-      if (instr->type == SEND_BATCH) {
-        // fi_send(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, NULL);
-        fi_tsend(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, i, NULL);
+      size_t _offset_add = 0;
+      int n_subtasks = batch_p_size / slice_threshold;
+      for (int j = 0; j < n_subtasks; j ++ ) {
+        // sub tasks for smaller slice
+        char* _buf_s = (char*)mem->data_buf_ptr + offset + _offset_add;
+        if (instr->type == SEND_BATCH) {
+          fi_tsend(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr, task_seq, NULL);
+          task_seq ++;
+        } else {
+          fi_trecv(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr, task_seq, 0, NULL);
+          task_seq ++;
+        }
+        // increase offset
+        _offset_add += slice_threshold;
+      }
+      size_t remain_size = batch_p_size - _offset_add;
+      if (remain_size > 0) {
+        wait_sizes[i] = n_subtasks + 1;
+        char* _buf_s = (char*)mem->data_buf_ptr + offset + _offset_add;
+        if (instr->type == SEND_BATCH) {
+          fi_tsend(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq, NULL);
+          task_seq ++;
+        } else {
+          fi_trecv(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq, 0, NULL);
+          task_seq ++;
+        }
+      } else if (remain_size < 0) {
+        std::cerr << "!!!not possible to have remain size lower than 0\n";
       } else {
-        // fi_recv(efa->ep, _buf_s, batch_p_size, NULL, 0, NULL);
-        fi_trecv(efa->ep, _buf_s, batch_p_size, NULL, efa->peer_addr, i, 0, NULL);
+        wait_sizes[i] = n_subtasks;
       }
     }
-    std::cout << "launched tagged msgs \n";
-    if (instr->type == SEND_BATCH) {
-      this->_wait_cq(efa->txcq, batch_n);
-    } else {
-      this->_wait_cq(efa->rxcq, batch_n);
+    // std::cout << "launched tagged msgs \n";
+    for (int i = 0; i < batch_n; i++) {
+      if (instr->type == SEND_BATCH) {
+        this->_wait_cq(efa->txcq, wait_sizes[i]);
+      } else {
+        this->_wait_cq(efa->rxcq, wait_sizes[i]);
+      }
+      // update worker mem cntr
+      shm_lock(mem->sem_cntr, "sem cntr lock, err\n");
+      (*(int*)mem->cntr_ptr) += 1;
+      shm_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
     }
+
+    delete[] wait_sizes;
   };
 
   // main function of the shm worker
