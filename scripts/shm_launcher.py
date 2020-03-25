@@ -59,6 +59,7 @@ def main():
     workers.append(w_p)
 
   atexit.register(clean_proc, workers+[comm_p])
+  atexit.register(clean_shm, args.shm_prefix)
 
   while not comm_p.poll():
     time.sleep(1)

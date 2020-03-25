@@ -257,7 +257,7 @@ class SHMWorker {
             unsigned long long int shared_data_size) {
     efa_ep = new EFAEndpoint(this->name + "-efa-ep-" + std::to_string(rank));
     mem = new WorkerMemory(name, nw, rank, shared_data_size);
-    this->name = name;
+    this->name = name + std::to_string(rank);
     this->set_local_efa_addr(efa_ep);
     // init worker status
     *(int*)(mem->status_ptr) = 1;
@@ -375,7 +375,8 @@ class SHMWorker {
       }
       size_t remain_size = batch_p_size - _offset_add;
       if (remain_size > 0) {
-        wait_sizes[i] = n_subtasks + 1;
+        n_subtasks += 1;
+        wait_sizes[i] = n_subtasks;
         char* _buf_s = (char*)mem->data_buf_ptr + offset + _offset_add;
         if (instr->type == SEND_BATCH) {
           fi_tsend(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq, NULL);
@@ -389,9 +390,8 @@ class SHMWorker {
       } else {
         wait_sizes[i] = n_subtasks;
       }
-    }
-    // std::cout << "launched tagged msgs \n";
-    for (int i = 0; i < batch_n; i++) {
+
+      std::cout << name << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
       if (instr->type == SEND_BATCH) {
         this->_wait_cq(efa->txcq, wait_sizes[i]);
       } else {
@@ -402,6 +402,20 @@ class SHMWorker {
       (*(int*)mem->cntr_ptr) += 1;
       shm_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
     }
+    
+    // std::cout << "launched tagged msgs \n";
+    // for (int i = 0; i < batch_n; i++) {
+    //   std::cout << name << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
+    //   if (instr->type == SEND_BATCH) {
+    //     this->_wait_cq(efa->txcq, wait_sizes[i]);
+    //   } else {
+    //     this->_wait_cq(efa->rxcq, wait_sizes[i]);
+    //   }
+    //   // update worker mem cntr
+    //   shm_lock(mem->sem_cntr, "sem cntr lock, err\n");
+    //   (*(int*)mem->cntr_ptr) += 1;
+    //   shm_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
+    // }
 
     delete[] wait_sizes;
   };
@@ -712,6 +726,7 @@ class SHMCommunicator {
         char* _w_instr_data_p = _w_instr_p + INSTR_OFFSET;
         // first 4 bytes for task count
         *(int*)_w_instr_data_p = n_batches;
+        std::cout << "comm:: n batches: " << n_batches << std::endl;
         // assign operation type
         if (instr->type == SEND_BATCH)
           *(int*)(_w_instr_p + 8) = reverse_map(SEND_BATCH);
