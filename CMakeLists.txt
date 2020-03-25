@@ -16,6 +16,9 @@ if(UNIX AND NOT APPLE)
     set(LIBFABRIC_INCLUDE_DIR /opt/amazon/efa/include)
 endif()
 
+# file(COPY scripts ./scripts)
+configure_file(scripts/shm_launcher.py ./shm_launcher.py COPYONLY)
+
 ######################################################
 # - Try to find libfabric (http://directory.fsf.org/wiki/Libfabric)
 # Once done this will define
