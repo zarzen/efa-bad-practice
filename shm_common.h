@@ -350,7 +350,7 @@ class SHMWorker {
   void efa_send_recv_batch(EFAEndpoint* efa, Instruction* instr) {
     int batch_n = *(int*)instr->data;  // 4 bytes for number of batches
     int* wait_sizes = new int[batch_n];
-    size_t slice_threshold = 4 * 1024 * 1024; // 4MB
+    size_t slice_threshold = 2 * 1024 * 1024; // 4MB
     int task_seq = 0;
     // the rest of them: 8 bytes for offset; 4 bytes for size
     for (int i = 0; i < batch_n; i++) {
