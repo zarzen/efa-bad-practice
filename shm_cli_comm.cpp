@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
   std::string shm_prefix(argv[3]);
   int nw = std::atoi(argv[4]);
   unsigned long long data_buf_size = std::stoull(std::string(argv[5]));
-  trans::shm::SHMCommunicator comm(nw, shm_prefix, data_buf_size);
+  trans::shm::SHMCommunicator comm(nw, "cli-comm-0", shm_prefix, data_buf_size);
 
   cli_efa_addr_exchange(ip, port, comm);
   

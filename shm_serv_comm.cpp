@@ -40,15 +40,17 @@ void serv_efa_addr_exchange(std::string& ip,
 
 int main(int argc, char* argv[]) {
   std::cout << "server side communicator daemon\n";
-  if (argc < 5) {
-    std::cerr << "Usage: ./shm_serv <ip> <port> <shm-prefix> <num-workers> <data-buf-size>";
+  if (argc < 7) {
+    std::cerr << "Usage: ./shm_serv <ip> <port> <comm-name> <num-workers> <data-buf-name> <data-buf-size>";
   }
   std::string ip(argv[1]);
   std::string port(argv[2]);
-  std::string shm_prefix(argv[3]);
+  std::string comm_name(argv[3]);
   int nw = std::atoi(argv[4]);
-  unsigned long long data_buf_size = std::stoull(std::string(argv[5]));
-  trans::shm::SHMCommunicator comm(nw, shm_prefix, data_buf_size);
+  std::string data_buf_name(argv[5]);
+  size_t data_buf_size = std::stoull(std::string(argv[6]));
+
+  trans::shm::SHMCommunicator comm(nw, comm_name, data_buf_name, data_buf_size);
   serv_efa_addr_exchange(ip, port, comm);
 
   // daemon

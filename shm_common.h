@@ -154,7 +154,7 @@ class WorkerMemory {
   /* rank start from 0
     nw: total workers
    */
-  WorkerMemory(std::string prefix, int nw, int rank, unsigned long long int data_size) {
+  WorkerMemory(std::string prefix, int nw, int rank, std::string data_buf_name, size_t data_size) {
     data_buf_size = data_size;
     this->rank = rank;
     this->nw = nw;
@@ -163,7 +163,7 @@ class WorkerMemory {
     shm_cntr = std::string(prefix + SHM_SUFFIX_CNTR);          // counter
     shm_efa_addr = std::string(prefix + SHM_SUFFIX_EFA_ADDR);  // local efa addr
     shm_w_status = std::string(prefix + SHM_SUFFIX_W_STAT);    // worker status
-    shm_data_buf = std::string(prefix + SHM_SUFFIX_DATA_BUF);  // data buf
+    shm_data_buf = data_buf_name;  // data buf
 
     sem_name_instr =
         std::string("/" + prefix + SEM_SUFFIX_INSTR + std::to_string(rank));
@@ -246,18 +246,21 @@ class WorkerMemory {
 };
 
 class SHMWorker {
-  std::string name;
+  std::string comm_name;
+  int rank;
   EFAEndpoint* efa_ep;
   WorkerMemory* mem;
 
  public:
-  SHMWorker(std::string name,
+  SHMWorker(std::string comm_name,
             int nw,
             int rank,
-            unsigned long long int shared_data_size) {
-    efa_ep = new EFAEndpoint(this->name + "-efa-ep-" + std::to_string(rank));
-    mem = new WorkerMemory(name, nw, rank, shared_data_size);
-    this->name = name + std::to_string(rank);
+            std::string data_buf_name,
+            size_t shared_data_size) {
+    efa_ep = new EFAEndpoint(this->comm_name + "-efa-ep-" + std::to_string(rank));
+    mem = new WorkerMemory(comm_name, nw, rank, data_buf_name, shared_data_size);
+    this->comm_name = comm_name;
+    this->rank = rank;
     this->set_local_efa_addr(efa_ep);
     // init worker status
     *(int*)(mem->status_ptr) = 1;
@@ -391,7 +394,8 @@ class SHMWorker {
         wait_sizes[i] = n_subtasks;
       }
 
-      std::cout << name << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
+      std::cout << comm_name << "::" << rank 
+                << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
       if (instr->type == SEND_BATCH) {
         this->_wait_cq(efa->txcq, wait_sizes[i]);
       } else {
@@ -466,13 +470,15 @@ class SHMWorker {
 class SHMCommunicator {
  public:
   int nw;
-  std::string shm_prefix;
-  unsigned long long data_buf_size;
-  std::string shm_instr;
-  std::string shm_cntr;
-  std::string shm_efa_addr;
-  std::string shm_w_status;
-  std::string shm_data_buf;
+  std::string name;
+  std::string data_buf_name;
+  size_t data_buf_size;
+  // shm for workers
+  std::string ws_instr_shm_name;
+  std::string ws_cntr_shm_name;
+  std::string ws_efa_addr_shm_name;
+  std::string ws_status_shm_name;
+  
 
   void* ws_instr_ptr;
   void* ws_cntr_ptr;
@@ -499,9 +505,11 @@ class SHMCommunicator {
   sem_t* mtx_comm_cntr;
 
   SHMCommunicator(int num_workers,
-                  std::string shm_prefix,
-                  unsigned long long data_buf_size) {
-    this->shm_prefix = shm_prefix;
+                  std::string name,
+                  std::string data_buf_name,
+                  size_t data_buf_size) {
+    this->name = name;
+    this->data_buf_name = data_buf_name;
     this->nw = num_workers;
     this->data_buf_size = data_buf_size;
 
@@ -511,21 +519,20 @@ class SHMCommunicator {
 
   void create_workers_shm_sem() {
     // ------------ workers shm part
-    shm_instr = std::string(shm_prefix + SHM_SUFFIX_INSTR);  // instruction
-    shm_cntr = std::string(shm_prefix + SHM_SUFFIX_CNTR);    // counter
-    shm_efa_addr =
-        std::string(shm_prefix + SHM_SUFFIX_EFA_ADDR);  // local efa addr
-    shm_w_status =
-        std::string(shm_prefix + SHM_SUFFIX_W_STAT);  // worker status
-    shm_data_buf = std::string(shm_prefix + SHM_SUFFIX_DATA_BUF);  // data buf
+    ws_instr_shm_name = std::string(name + SHM_SUFFIX_INSTR);  // instruction
+    ws_cntr_shm_name = std::string(name + SHM_SUFFIX_CNTR);    // counter
+    ws_efa_addr_shm_name =
+        std::string(name + SHM_SUFFIX_EFA_ADDR);  // local efa addr
+    ws_status_shm_name =
+        std::string(name + SHM_SUFFIX_W_STAT);  // worker status
 
     // create shm for data buffer for all workers
-    int instr_fd = shm_open(shm_instr.c_str(), O_CREAT | O_RDWR, 0666);
-    int cntr_fd = shm_open(shm_cntr.c_str(), O_CREAT | O_RDWR, 0666);
-    int efa_add_fd = shm_open(shm_efa_addr.c_str(), O_CREAT | O_RDWR, 0666);
+    int instr_fd = shm_open(ws_instr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+    int cntr_fd = shm_open(ws_cntr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+    int efa_add_fd = shm_open(ws_efa_addr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
     int worker_status_fd =
-        shm_open(shm_w_status.c_str(), O_CREAT | O_RDWR, 0666);
-    int data_buf_fd = shm_open(shm_data_buf.c_str(), O_CREAT | O_RDWR, 0666);
+        shm_open(ws_status_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+    int data_buf_fd = shm_open(data_buf_name.c_str(), O_CREAT | O_RDWR, 0666);
 
     // truncate memory
     check_err((ftruncate(instr_fd, INSTR_SIZE * nw) < 0),
@@ -558,15 +565,15 @@ class SHMCommunicator {
     for (int i = 0; i < nw; i++) {
       // name for semaphores
       std::string _instr =
-          std::string("/" + shm_prefix + SEM_SUFFIX_INSTR + std::to_string(i));
+          std::string("/" + name + SEM_SUFFIX_INSTR + std::to_string(i));
       std::string _cntr =
-          std::string("/" + shm_prefix + SEM_SUFFIX_CNTR + std::to_string(i));
+          std::string("/" + name + SEM_SUFFIX_CNTR + std::to_string(i));
       std::string _efa_addr = std::string(
-          "/" + shm_prefix + SEM_SUFFIX_EFA_ADDR + std::to_string(i));
+          "/" + name + SEM_SUFFIX_EFA_ADDR + std::to_string(i));
       std::string _w_status =
-          std::string("/" + shm_prefix + SEM_SUFFIX_W_STAT + std::to_string(i));
+          std::string("/" + name + SEM_SUFFIX_W_STAT + std::to_string(i));
       std::string _data_buf = std::string(
-          "/" + shm_prefix + SEM_SUFFIX_DATA_BUF + std::to_string(i));
+          "/" + name + SEM_SUFFIX_DATA_BUF + std::to_string(i));
       // open and create semaphores, init value to 1
       sem_t* _mtx_instr =
           sem_open(_instr.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 1);
@@ -592,8 +599,8 @@ class SHMCommunicator {
 
   /* create shared memory for upper level API calls */
   void create_self_shm_sem() {
-    shm_comm_instr = std::string(shm_prefix + "-comm-instr-mem");
-    shm_comm_cntr = std::string(shm_prefix + "-comm-cntr-mem");
+    shm_comm_instr = std::string(name + "-comm-instr-mem");
+    shm_comm_cntr = std::string(name + "-comm-cntr-mem");
     int comm_instr_fd =
         shm_open(shm_comm_instr.c_str(), O_CREAT | O_RDWR, 0666);
     int comm_cntr_fd = shm_open(shm_comm_cntr.c_str(), O_CREAT | O_RDWR, 0666);
@@ -608,8 +615,8 @@ class SHMCommunicator {
         mmap(0, CNTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, comm_cntr_fd, 0);
 
     // create semaphore
-    std::string sem_comm_instr("/" + shm_prefix + "-comm-instr-mtx");
-    std::string sem_comm_cntr("/" + shm_prefix + "-comm-cntr-mtx");
+    std::string sem_comm_instr("/" + name + "-comm-instr-mtx");
+    std::string sem_comm_cntr("/" + name + "-comm-cntr-mtx");
     mtx_comm_instr =
         sem_open(sem_comm_instr.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 1);
     mtx_comm_cntr =
