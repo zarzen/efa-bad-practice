@@ -34,15 +34,16 @@ void cli_efa_addr_exchange(std::string& ip,
 
 
 int main(int argc, char* argv[]) {
-  if (argc < 3) {
-    std::cerr << "Usage: ./shm_cli <ip> <port> <shm-prefix> <num-workers> <data-buf-size>";
+  if (argc < 7) {
+    std::cerr << "Usage: ./shm_cli <ip> <port> <comm-name> <num-workers> <data-buf-name> <data-buf-size>";
   }
   std::string ip(argv[1]);
   std::string port(argv[2]);
   std::string shm_prefix(argv[3]);
   int nw = std::atoi(argv[4]);
-  unsigned long long data_buf_size = std::stoull(std::string(argv[5]));
-  trans::shm::SHMCommunicator comm(nw, "cli-comm-0", shm_prefix, data_buf_size);
+  std::string comm_name(argv[5]);
+  size_t data_buf_size = std::stoull(std::string(argv[6]));
+  trans::shm::SHMCommunicator comm(nw, comm_name, shm_prefix, data_buf_size);
 
   cli_efa_addr_exchange(ip, port, comm);
   
