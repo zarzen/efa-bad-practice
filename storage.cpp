@@ -102,6 +102,8 @@ class CommAgent {
 
   // put send instr in comms[commIdx]'s shm
   void EFASend(Instr& ins);
+
+  void _setEFAInstr(Instr& ins);
 };
 
 class ParamStore {
@@ -255,13 +257,61 @@ int CommAgent::getCommunicator(char* peerAddrs, char* commAddrs) {
   std::thread ct(commThd, comm);
   ct.detach();
   this->commThds.push_back(std::move(ct));
+  // TODO: get comm Instr, cntr shm
+  std::string _instr_shm_name = commName + "-comm-instr-mem";
+  std::string _cntr_shm_name = commName + "-comm-cntr-mem";
+  int instr_fd = shm_open(_instr_shm_name.c_str(), O_RDWR, 0666);
+  int cntr_fd = shm_open(_cntr_shm_name.c_str(), O_RDWR, 0666);
+
+  void* _instr_ptr = 
+      mmap(0, trans::shm::INSTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, instr_fd, 0);
+  void* _cntr_ptr = 
+      mmap(0, trans::shm::CNTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, cntr_fd, 0);
+  commInstrPtrs.push_back(_instr_ptr);
+  commCntrPtrs.push_back(_cntr_ptr);
+
+  std::string _sem_comm_instr("/" + commName + "-comm-instr-mtx");
+  std::string _sem_comm_cntr("/" + commName + "-comm-cntr-mtx");
+
+  sem_t* _instr_mtx = sem_open(_sem_comm_instr.c_str(), 0);
+  sem_t* _cntr_mtx = sem_open(_sem_comm_cntr.c_str(), 0);
+  commInstrMtxs.push_back(_instr_mtx);
+  commCntrMtxs.push_back(_cntr_mtx);
 
   nComm++;
   return idx;
 }
 
+void CommAgent::_setEFAInstr(Instr& ins){
+  int ops; // operation code
+  if (ins.type == PUSH) {
+    ops = trans::shm::reverse_map(trans::shm::RECV_BATCH);
+  } else {
+    ops = trans::shm::reverse_map(trans::shm::SEND_BATCH);
+  }
+  // get buf
+  std::vector<std::pair<size_t, size_t>> bufs;
+  this->store->getBufs(ins, bufs);
+  // write instruction to corresponding communicator mem
+  trans::shm::shm_lock(commInstrMtxs[ins.commIdx], "_setEFAInstr put inst: lock err");
+  void* _instr_ptr = commInstrPtrs[ins.commIdx];
+  *(int*)((char*)_instr_ptr + 8) = ops;
+  *(int*)((char*)_instr_ptr + 12) = ins.nBatch;
+  char* _batch_data_s = (char*)_instr_ptr + 16;
+  for (int i = 0; i < ins.nBatch; i++) {
+    *(size_t*)(_batch_data_s + i * 16) = bufs[i].first;
+    *(size_t*)(_batch_data_s + i * 16 + 8) = bufs[i].second;
+  }
+  *(double*)_instr_ptr = trans::time_now();
+  trans::shm::shm_unlock(commInstrMtxs[ins.commIdx], "_setEFAInstr put inst: unlock err");
+}
+
 void CommAgent::EFARecv(Instr& ins) {
-  // 
+  _setEFAInstr(ins);
+}
+
+void CommAgent::EFASend(Instr& ins) {
+  _setEFAInstr(ins);
 }
 
 ParamStore::ParamStore(std::string name, std::string& port) {
@@ -278,7 +328,17 @@ ParamStore::ParamStore(std::string name, std::string& port) {
 }
 
 void ParamStore::getBufs(Instr& ins, std::vector<std::pair<size_t, size_t>>& bufs) {
-  // TODO 
+  // if the key is not exist; need to move the cur pointer
+  auto _it = memStore.find(ins.key);
+  if (_it != memStore.end()){
+    bufs = _it->second;
+  } else {
+    // key is not exist
+    for (size_t& bs: ins.bufs){
+      bufs.push_back(std::pair<size_t, size_t>(curOffset, bs));
+      curOffset += bs;
+    }
+  }
 };
 
 void ParamStore::run() {
