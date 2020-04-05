@@ -122,7 +122,7 @@ class ParamStore {
   ThdSafeQueue<Instr> taskq;
   CommAgent* cAgent;
 
-  ParamStore(std::string name, std::string port, size_t mem_size);
+  ParamStore(std::string name, std::string port, size_t mem_size, int commNw);
   ~ParamStore();
   // get offsets based on the keyname in ins
   void getBufs(Instr& ins, std::vector<std::pair<size_t, size_t>>& bufs);
@@ -184,7 +184,7 @@ StoreCli::StoreCli(std::string cliName,
 
 void StoreCli::_init() {
   // create communicator
-  std::string commName = name + "-comm";
+  std::string commName = name + "-storecli-comm";
   trans::shm::SHMCommunicator* comm =
       new trans::shm::SHMCommunicator(nw, commName, nameOfCache, cacheSize);
   // create workers of communicators
@@ -512,12 +512,11 @@ void CommAgent::EFASend(Instr& ins) {
   _setEFAInstr(ins);
 }
 
-ParamStore::ParamStore(std::string name, std::string port, size_t mem_size) {
+ParamStore::ParamStore(std::string name, std::string port, size_t mem_size, int commNw) {
   this->storeName = name;
   this->port = port;
 
-  // hyper parameters
-  int commNw = 4;
+  // hyper parameter
   std::string data_buf_name = "mem-store-serv";
 
   cAgent =
