@@ -195,6 +195,7 @@ void sockServThd(ParamStore* store, std::string& port) {
   while (true && !store->_exit) {
     int sockfd = serv._listen();  // get new connection
     std::thread _t(cliConnHandlerThd, store, sockfd);
+    _t.detach();
     handles.push_back(std::move(_t));
   }
   for (int i = 0; i < handles.size(); i++) {
@@ -242,6 +243,7 @@ int CommAgent::getCommunicator(char* peerAddrs, char* commAddrs) {
   // create workers
   for (int i = 0; i < nw; i++) {
     std::thread wt(workerThd, commName, nw, i, data_buf_name, data_buf_size);
+    wt.detach();
     commWorkerThds.push_back(std::move(wt));
   }
 
