@@ -10,7 +10,9 @@ class SockCli {
 public:
   int client_sock;
 
+  SockCli();
   SockCli(std::string ip, std::string port);
+  SockCli(const SockCli& s);
   int _send(char *buf, int len);
   int _recv(char *buf, int len);
 };

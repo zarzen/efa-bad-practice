@@ -25,6 +25,12 @@ SockCli::SockCli(std::string ip, std::string port) {
   }
 };
 
+SockCli::SockCli(){}
+
+SockCli::SockCli(const SockCli& s){
+  this->client_sock = s.client_sock;
+}
+
 int SockCli::_send(char *buf, int len) {
   return send(client_sock, buf, len, 0);
 };

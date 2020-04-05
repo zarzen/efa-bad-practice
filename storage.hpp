@@ -1,4 +1,8 @@
+#ifndef STORE_H
+#define STORE_H
+
 #include <atomic>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -113,17 +117,207 @@ class ParamStore {
   std::atomic<bool> _exit{false};
   std::unordered_map<std::string, std::vector<std::pair<size_t, size_t>>>
       memStore;
-  size_t curOffset;  // the current offset; will be changed by getBuf operation
+  std::atomic<size_t> curOffset{
+      0};  // the current offset; will be changed by getBuf operation
   ThdSafeQueue<Instr> taskq;
   CommAgent* cAgent;
 
-  ParamStore(std::string name, std::string& port);
+  ParamStore(std::string name, std::string port, size_t mem_size);
   ~ParamStore();
   // get offsets based on the keyname in ins
   void getBufs(Instr& ins, std::vector<std::pair<size_t, size_t>>& bufs);
   // wrapper logics to start threads, initialization environments;
   void run();
 };
+
+class StoreCli {
+ public:
+  std::string name, dstIP, dstPort, nameOfCache;
+  int nw;
+  size_t cacheSize;
+
+  std::vector<std::thread> wThds;
+  std::thread cThd;
+  trans::SockCli sCli;
+
+  // set instr and get status from comm
+  void* shmCommInst;
+  void* shmCommCntr;
+  sem_t* semCommInst;
+  sem_t* semCommCntr;
+
+  StoreCli(std::string cliName,
+           std::string servIP,
+           std::string servPort,
+           std::string nameOfCache,
+           size_t sizeOfCache,
+           int nw);
+  // internal init function
+  void _init();
+
+  //
+  void _open_shm_sem(std::string& commName);
+
+  int getCommCntr();
+
+  // push params
+  void push(std::string& key, std::vector<std::pair<size_t, size_t>>& dataLoc);
+
+  void pull(std::string& key, std::vector<std::pair<size_t, size_t>>& dataLoc);
+
+  void _setEFAInstr(int ops, std::vector<std::pair<size_t, size_t>>& dataLoc);
+};
+
+StoreCli::StoreCli(std::string cliName,
+                   std::string servIP,
+                   std::string servPort,
+                   std::string nameOfCache,
+                   size_t sizeOfCache,
+                   int nw) {
+  this->name = cliName;
+  this->dstIP = servIP;
+  this->dstPort = servPort;
+  this->nameOfCache = nameOfCache;
+  cacheSize = sizeOfCache;
+  this->nw = nw;  // num of workers for communicator
+}
+
+void StoreCli::_init() {
+  // create communicator
+  std::string commName = name + "-comm";
+  trans::shm::SHMCommunicator* comm =
+      new trans::shm::SHMCommunicator(nw, commName, nameOfCache, cacheSize);
+  // create workers of communicators
+  for (int i = 0; i < nw; i++) {
+    std::thread wt(workerThd, commName, nw, i, nameOfCache, cacheSize);
+    wt.detach();
+    wThds.push_back(std::move(wt));
+  }
+  // wait for workers ready to get EFA address
+  while (!comm->local_efa_addrs_ready()) {
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  // EFA addrs exchange
+  size_t addrs_size = nw * trans::shm::EFA_ADDR_SIZE;
+  char* localAddrs = new char[addrs_size];
+  char* peerAddrs = new char[addrs_size];
+  comm->get_local_efa_addrs(localAddrs);
+
+  sCli = trans::SockCli(dstIP, dstPort);
+  sCli._send(localAddrs, addrs_size);
+  sCli._recv(peerAddrs, addrs_size);
+  comm->set_local_peer_addrs(peerAddrs);
+
+  std::thread _ct(commThd, comm);
+  _ct.detach();
+  cThd = std::move(_ct);
+
+  // init communicator memory
+  _open_shm_sem(commName);
+}
+
+void StoreCli::_open_shm_sem(std::string& commName) {
+  std::string _instr_shm_name = commName + "-comm-instr-mem";
+  std::string _cntr_shm_name = commName + "-comm-cntr-mem";
+  int instr_fd = shm_open(_instr_shm_name.c_str(), O_RDWR, 0666);
+  int cntr_fd = shm_open(_cntr_shm_name.c_str(), O_RDWR, 0666);
+
+  this->shmCommInst = mmap(0, trans::shm::INSTR_SIZE, PROT_READ | PROT_WRITE,
+                           MAP_SHARED, instr_fd, 0);
+  this->shmCommCntr = mmap(0, trans::shm::CNTR_SIZE, PROT_READ | PROT_WRITE,
+                           MAP_SHARED, cntr_fd, 0);
+  std::string _sem_comm_instr("/" + commName + "-comm-instr-mtx");
+  std::string _sem_comm_cntr("/" + commName + "-comm-cntr-mtx");
+
+  this->semCommInst = sem_open(_sem_comm_instr.c_str(), 0);
+  this->semCommCntr = sem_open(_sem_comm_cntr.c_str(), 0);
+}
+
+void StoreCli::_setEFAInstr(int ops,
+                            std::vector<std::pair<size_t, size_t>>& dataLoc) {
+  trans::shm::shm_lock(semCommInst, "StoreCli::_setEFAInstr: lock err");
+  *(int*)((char*)shmCommInst + 8) = ops;
+  *(int*)((char*)shmCommInst + 12) = dataLoc.size();
+  char* _batch_data_s = (char*)shmCommInst + 16;
+  for (int i = 0; i < dataLoc.size(); i++) {
+    *(size_t*)(_batch_data_s + i * 16) = dataLoc[i].first;
+    *(size_t*)(_batch_data_s + i * 16 + 8) = dataLoc[i].second;
+  }
+  *(double*)shmCommInst = trans::time_now();
+  trans::shm::shm_unlock(semCommInst, "StoreCli::_setEFAInstr: unlock err");
+}
+
+void StoreCli::push(std::string& key,
+                    std::vector<std::pair<size_t, size_t>>& srcDataLoc) {
+  // =============== send ctl msg via TCP =================
+  // send instr type
+  char type[4];
+  *(int*)type = 0;
+  sCli._send(type, 4);
+
+  // send key length
+  char keylen[4];
+  *(int*)keylen = key.size();
+  sCli._send(keylen, 4);
+
+  // send key
+  auto keybuf = std::make_unique<char>(key.size());
+  memcpy(keybuf.get(), key.c_str(), key.size());
+  sCli._send(keybuf.get(), key.size());
+
+  // send nBatch
+  char nb[4];
+  *(int*)nb = srcDataLoc.size();
+  sCli._send(nb, 4);
+
+  // send trunk sizes of data
+  for (int i = 0; i < srcDataLoc.size(); i++) {
+    char _bs[8];
+    *(size_t*)_bs = srcDataLoc[i].second;
+    sCli._send(_bs, 8);
+  }
+  // =============== end ctl msg via TCP =================
+
+  // =============== Info local EFA
+  _setEFAInstr(trans::shm::reverse_map(trans::shm::SEND_BATCH), srcDataLoc);
+  // =============== End EFA instruction
+}
+
+void StoreCli::pull(std::string& key,
+                    std::vector<std::pair<size_t, size_t>>& dataLoc) {
+  // =============== send ctl msg via TCP =================
+  // send instr type
+  char type[4];
+  *(int*)type = 0;
+  sCli._send(type, 4);
+
+  // send key length
+  char keylen[4];
+  *(int*)keylen = key.size();
+  sCli._send(keylen, 4);
+
+  // send key
+  auto keybuf = std::make_unique<char>(key.size());
+  memcpy(keybuf.get(), key.c_str(), key.size());
+  sCli._send(keybuf.get(), key.size());
+
+  // send nBatch = 0
+  char nb[4];
+  *(int*)nb = 0;
+  sCli._send(nb, 4);
+  // =============== end ctl msg via TCP =================
+
+  // =============== Info local EFA
+  _setEFAInstr(trans::shm::reverse_map(trans::shm::RECV_BATCH), dataLoc);
+  // =============== End EFA instruction
+}
+
+int StoreCli::getCommCntr() {
+  trans::shm::shm_lock(semCommCntr, "StoreCli::getCommCntr: lock err");
+  int _c = *(int*)shmCommCntr;
+  trans::shm::shm_unlock(semCommCntr, "StoreCli::getCommCntr: unlock err");
+  return _c;
+}
 
 void cliConnHandlerThd(ParamStore* store, int cli) {
   // read the remote efa address from remote
@@ -162,9 +356,9 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
     read(cli, nb, 4);
     ins.nBatch = *(int*)nb;
     for (int i = 0; i < ins.nBatch; i++) {
-      // if nb is 0
-      char* s[8];
-      read(cli, nb, 8);
+      // if nb is greater than 0
+      char s[8];
+      read(cli, s, 8);
       ins.bufs.push_back(*(size_t*)s);
     }
 
@@ -259,16 +453,16 @@ int CommAgent::getCommunicator(char* peerAddrs, char* commAddrs) {
   std::thread ct(commThd, comm);
   ct.detach();
   this->commThds.push_back(std::move(ct));
-  // TODO: get comm Instr, cntr shm
+  // done: get comm Instr, cntr shm
   std::string _instr_shm_name = commName + "-comm-instr-mem";
   std::string _cntr_shm_name = commName + "-comm-cntr-mem";
   int instr_fd = shm_open(_instr_shm_name.c_str(), O_RDWR, 0666);
   int cntr_fd = shm_open(_cntr_shm_name.c_str(), O_RDWR, 0666);
 
-  void* _instr_ptr = 
-      mmap(0, trans::shm::INSTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, instr_fd, 0);
-  void* _cntr_ptr = 
-      mmap(0, trans::shm::CNTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, cntr_fd, 0);
+  void* _instr_ptr = mmap(0, trans::shm::INSTR_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_SHARED, instr_fd, 0);
+  void* _cntr_ptr = mmap(0, trans::shm::CNTR_SIZE, PROT_READ | PROT_WRITE,
+                         MAP_SHARED, cntr_fd, 0);
   commInstrPtrs.push_back(_instr_ptr);
   commCntrPtrs.push_back(_cntr_ptr);
 
@@ -284,8 +478,8 @@ int CommAgent::getCommunicator(char* peerAddrs, char* commAddrs) {
   return idx;
 }
 
-void CommAgent::_setEFAInstr(Instr& ins){
-  int ops; // operation code
+void CommAgent::_setEFAInstr(Instr& ins) {
+  int ops;  // operation code
   if (ins.type == PUSH) {
     ops = trans::shm::reverse_map(trans::shm::RECV_BATCH);
   } else {
@@ -295,7 +489,8 @@ void CommAgent::_setEFAInstr(Instr& ins){
   std::vector<std::pair<size_t, size_t>> bufs;
   this->store->getBufs(ins, bufs);
   // write instruction to corresponding communicator mem
-  trans::shm::shm_lock(commInstrMtxs[ins.commIdx], "_setEFAInstr put inst: lock err");
+  trans::shm::shm_lock(commInstrMtxs[ins.commIdx],
+                       "_setEFAInstr put inst: lock err");
   void* _instr_ptr = commInstrPtrs[ins.commIdx];
   *(int*)((char*)_instr_ptr + 8) = ops;
   *(int*)((char*)_instr_ptr + 12) = ins.nBatch;
@@ -305,7 +500,8 @@ void CommAgent::_setEFAInstr(Instr& ins){
     *(size_t*)(_batch_data_s + i * 16 + 8) = bufs[i].second;
   }
   *(double*)_instr_ptr = trans::time_now();
-  trans::shm::shm_unlock(commInstrMtxs[ins.commIdx], "_setEFAInstr put inst: unlock err");
+  trans::shm::shm_unlock(commInstrMtxs[ins.commIdx],
+                         "_setEFAInstr put inst: unlock err");
 }
 
 void CommAgent::EFARecv(Instr& ins) {
@@ -316,27 +512,27 @@ void CommAgent::EFASend(Instr& ins) {
   _setEFAInstr(ins);
 }
 
-ParamStore::ParamStore(std::string name, std::string& port) {
+ParamStore::ParamStore(std::string name, std::string port, size_t mem_size) {
   this->storeName = name;
   this->port = port;
 
   // hyper parameters
   int commNw = 4;
   std::string data_buf_name = "mem-store-serv";
-  size_t data_buf_size = 10 * 1024 * 1024 * 1024;  // 10GB
 
-  cAgent = new CommAgent(commNw, name + "-cAgent", data_buf_name, data_buf_size,
-                         this);
+  cAgent =
+      new CommAgent(commNw, name + "-cAgent", data_buf_name, mem_size, this);
 }
 
-void ParamStore::getBufs(Instr& ins, std::vector<std::pair<size_t, size_t>>& bufs) {
+void ParamStore::getBufs(Instr& ins,
+                         std::vector<std::pair<size_t, size_t>>& bufs) {
   // if the key is not exist; need to move the cur pointer
   auto _it = memStore.find(ins.key);
-  if (_it != memStore.end()){
+  if (_it != memStore.end()) {
     bufs = _it->second;
   } else {
     // key is not exist
-    for (size_t& bs: ins.bufs){
+    for (size_t& bs : ins.bufs) {
       bufs.push_back(std::pair<size_t, size_t>(curOffset, bs));
       curOffset += bs;
     }
@@ -353,3 +549,4 @@ void ParamStore::run() {
 
 };  // namespace store
 };  // namespace pipeps
+#endif
