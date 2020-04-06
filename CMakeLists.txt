@@ -86,5 +86,12 @@ target_link_libraries(test_p_cli ${LIBFABRIC_LIBRARY} pthread rt)
 add_executable(test_p_serv shm_demo_serv_veri.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
 target_link_libraries(test_p_serv ${LIBFABRIC_LIBRARY} pthread rt)
 
+add_executable(store_serv store_serv.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(store_serv ${LIBFABRIC_LIBRARY} pthread rt)
+
+add_executable(store_cli store_cli.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
+target_link_libraries(store_cli ${LIBFABRIC_LIBRARY} pthread rt)
+
+
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
