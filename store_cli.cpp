@@ -36,7 +36,8 @@ int main(int argc, char const* argv[]) {
 
   std::unique_ptr<StoreCli> sCli(
       new StoreCli(cname, ip, port, cacheName, cacheSize, 4));
-
+  // make sure shm opened
+  std::this_thread::sleep_for(std::chrono::seconds(1));
   void* dataPtr = openSHM(cacheName, cacheSize);
   std::vector<std::pair<size_t, size_t>> sendDataLoc;
   std::vector<std::pair<size_t, size_t>> recvDataLoc;
