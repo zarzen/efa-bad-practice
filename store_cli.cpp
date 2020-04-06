@@ -47,7 +47,7 @@ int main(int argc, char const* argv[]) {
   }
   size_t paramSize = cacheOffset;
   getRecvLoc(cacheOffset, sendDataLoc, recvDataLoc);
-
+  std::cout << "params memory size: " + std::to_string(paramSize) + "\n";
   int curCntr = sCli->getCommCntr();
   int target = curCntr + sendDataLoc.size();
   double s = trans::time_now();
@@ -55,6 +55,7 @@ int main(int argc, char const* argv[]) {
   while (sCli->getCommCntr() != target) {
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
+  std::cout << "push parameters completed\n";
 
   // receive multiple times
   for (int i = 0; i < 10; i++) {
@@ -107,6 +108,8 @@ size_t _load_to(std::string& filename, char* data_buf) {
     is.close();
 
     return length;
+  } else {
+    return -1;
   }
 };
 
@@ -124,6 +127,11 @@ size_t loadParamToSHM(void* memPtr,
     char* buf = (char*)memPtr + _offset;
     std::string datafile = dataDir + b;
     size_t len = _load_to(datafile, buf);
+    if (len < 0) {
+      std::cerr << "err while loadParamToSHM\n";
+      exit(-1);
+    }
+    std::cout << "load data size: " + std::to_string(len) << "\n";
     dataLoc.push_back(std::make_pair(_offset, len));
     _offset += len;
   }

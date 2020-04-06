@@ -12,7 +12,7 @@
       "args": ["8888"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "environment": [],
+      "environment": [{ "name": "FI_LOG_LEVEL", "value": "Debug" }],
       "externalConsole": false,
       "MIMode": "gdb",
       "setupCommands": [

@@ -33,7 +33,7 @@ int EFAEndpoint::init_res() {
   if (err < 0)
     std::cerr << "fi_getinfo err " << err << "\n";
 
-  fi_freeinfo(hints);
+  // fi_freeinfo(hints);
   std::cout << "Using OFI device: " << fi->fabric_attr->name << "\n";
 
   // init fabric, domain, address-vector,

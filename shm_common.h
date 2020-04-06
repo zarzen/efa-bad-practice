@@ -121,7 +121,7 @@ class WorkerMemory {
   unsigned long long int data_buf_size;  // input from user
   // based on rank to move the pointer of instr, efa_addr, cntr, status
   int rank;
-  int nw; // number of workers
+  int nw;  // number of workers
 
   // shm identifiers
   std::string shm_instr;
@@ -154,7 +154,11 @@ class WorkerMemory {
   /* rank start from 0
     nw: total workers
    */
-  WorkerMemory(std::string prefix, int nw, int rank, std::string data_buf_name, size_t data_size) {
+  WorkerMemory(std::string prefix,
+               int nw,
+               int rank,
+               std::string data_buf_name,
+               size_t data_size) {
     data_buf_size = data_size;
     this->rank = rank;
     this->nw = nw;
@@ -163,7 +167,7 @@ class WorkerMemory {
     shm_cntr = std::string(prefix + SHM_SUFFIX_CNTR);          // counter
     shm_efa_addr = std::string(prefix + SHM_SUFFIX_EFA_ADDR);  // local efa addr
     shm_w_status = std::string(prefix + SHM_SUFFIX_W_STAT);    // worker status
-    shm_data_buf = data_buf_name;  // data buf
+    shm_data_buf = data_buf_name;                              // data buf
 
     sem_name_instr =
         std::string("/" + prefix + SEM_SUFFIX_INSTR + std::to_string(rank));
@@ -188,12 +192,12 @@ class WorkerMemory {
     int efa_add_fd = shm_open(shm_efa_addr.c_str(), O_RDWR, 0666);
     int worker_status_fd = shm_open(shm_w_status.c_str(), O_RDWR, 0666);
     // map memory pointer
-    instr_ptr =
-        mmap(0, nw * INSTR_SIZE , PROT_READ | PROT_WRITE, MAP_SHARED, instr_fd, 0);
+    instr_ptr = mmap(0, nw * INSTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                     instr_fd, 0);
     cntr_ptr =
         mmap(0, nw * CNTR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, cntr_fd, 0);
-    efa_add_ptr = mmap(0, nw * EFA_ADDR_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                       efa_add_fd, 0);
+    efa_add_ptr = mmap(0, nw * EFA_ADDR_SIZE, PROT_READ | PROT_WRITE,
+                       MAP_SHARED, efa_add_fd, 0);
     status_ptr = mmap(0, nw * STATUS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
                       worker_status_fd, 0);
     data_buf_ptr = mmap(0, data_buf_size, PROT_READ | PROT_WRITE, MAP_SHARED,
@@ -203,12 +207,11 @@ class WorkerMemory {
     cntr_ptr = (void*)((char*)cntr_ptr + this->rank * cntr_size);
     efa_add_ptr = (void*)((char*)efa_add_ptr + this->rank * efa_addr_size);
     status_ptr = (void*)((char*)status_ptr + this->rank * status_size);
-    
-    std::cout << "garbe at instr_ptr " << (char*) instr_ptr << "\n";
+
+    std::cout << "garbe at instr_ptr " << (char*)instr_ptr << "\n";
     // check memory all zeros
-    std::cout << "instr memory all zeros: " 
-              << check_all_zero((char*)instr_ptr, instr_size)
-              << "\n";
+    std::cout << "instr memory all zeros: "
+              << check_all_zero((char*)instr_ptr, instr_size) << "\n";
 
     // open mutexs
     // controller will create the semaphore
@@ -257,8 +260,10 @@ class SHMWorker {
             int rank,
             std::string data_buf_name,
             size_t shared_data_size) {
-    efa_ep = new EFAEndpoint(this->comm_name + "-efa-ep-" + std::to_string(rank));
-    mem = new WorkerMemory(comm_name, nw, rank, data_buf_name, shared_data_size);
+    efa_ep =
+        new EFAEndpoint(this->comm_name + "-efa-ep-" + std::to_string(rank));
+    mem =
+        new WorkerMemory(comm_name, nw, rank, data_buf_name, shared_data_size);
     this->comm_name = comm_name;
     this->rank = rank;
     this->set_local_efa_addr(efa_ep);
@@ -318,7 +323,8 @@ class SHMWorker {
 
         printf("Completion with error: %d\n", entry.err);
         char _err_buf[100];
-        printf("!!! err: %s\n", fi_cq_strerror(cq, entry.prov_errno, entry.err_data, _err_buf, 100));
+        printf("!!! err: %s\n", fi_cq_strerror(cq, entry.prov_errno,
+                                               entry.err_data, _err_buf, 100));
         printf("%s\n", _err_buf);
         // if (entry.err == FI_EADDRNOTAVAIL)
         // 	get_peer_addr(entry.err_data);
@@ -351,27 +357,29 @@ class SHMWorker {
   };
 
   void efa_send_recv_batch(EFAEndpoint* efa, Instruction* instr) {
+    std::cout << "enter worker efa_send_recv_batch\n";
     int batch_n = *(int*)instr->data;  // 4 bytes for number of batches
     int* wait_sizes = new int[batch_n];
-    size_t slice_threshold = 2 * 1024 * 1024; // 4MB
+    size_t slice_threshold = 2 * 1024 * 1024;  // 4MB
     int task_seq = 0;
     // the rest of them: 8 bytes for offset; 4 bytes for size
     for (int i = 0; i < batch_n; i++) {
       unsigned long long int offset =
           *(unsigned long long int*)((instr->data) + 4 + 16 * i);
-      size_t batch_p_size =
-          *(size_t*)((instr->data) + 4 + 16 * i + 8);
+      size_t batch_p_size = *(size_t*)((instr->data) + 4 + 16 * i + 8);
       size_t _offset_add = 0;
       int n_subtasks = batch_p_size / slice_threshold;
-      for (int j = 0; j < n_subtasks; j ++ ) {
+      for (int j = 0; j < n_subtasks; j++) {
         // sub tasks for smaller slice
         char* _buf_s = (char*)mem->data_buf_ptr + offset + _offset_add;
         if (instr->type == SEND_BATCH) {
-          fi_tsend(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr, task_seq, NULL);
-          task_seq ++;
+          fi_tsend(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr,
+                   task_seq, NULL);
+          task_seq++;
         } else {
-          fi_trecv(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr, task_seq, 0, NULL);
-          task_seq ++;
+          fi_trecv(efa->ep, _buf_s, slice_threshold, NULL, efa->peer_addr,
+                   task_seq, 0, NULL);
+          task_seq++;
         }
         // increase offset
         _offset_add += slice_threshold;
@@ -382,11 +390,13 @@ class SHMWorker {
         wait_sizes[i] = n_subtasks;
         char* _buf_s = (char*)mem->data_buf_ptr + offset + _offset_add;
         if (instr->type == SEND_BATCH) {
-          fi_tsend(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq, NULL);
-          task_seq ++;
+          fi_tsend(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq,
+                   NULL);
+          task_seq++;
         } else {
-          fi_trecv(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq, 0, NULL);
-          task_seq ++;
+          fi_trecv(efa->ep, _buf_s, remain_size, NULL, efa->peer_addr, task_seq,
+                   0, NULL);
+          task_seq++;
         }
       } else if (remain_size < 0) {
         std::cerr << "!!!not possible to have remain size lower than 0\n";
@@ -394,22 +404,29 @@ class SHMWorker {
         wait_sizes[i] = n_subtasks;
       }
 
-      std::cout << comm_name << "::" << rank 
-                << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
       if (instr->type == SEND_BATCH) {
+        std::cout << comm_name << "::" << rank
+                  << " worker:: wait for SEND_BATCH tasks:" << wait_sizes[i]
+                  << std::endl;
         this->_wait_cq(efa->txcq, wait_sizes[i]);
       } else {
+        std::cout << comm_name << "::" << rank
+                  << " worker:: wait for RECV_BATCH tasks:" << wait_sizes[i]
+                  << std::endl;
         this->_wait_cq(efa->rxcq, wait_sizes[i]);
       }
+      std::cout << comm_name << "::" << rank
+                << " worker:: wait DONE:" << wait_sizes[i] << std::endl;
       // update worker mem cntr
       shm_lock(mem->sem_cntr, "sem cntr lock, err\n");
       (*(int*)mem->cntr_ptr) += 1;
       shm_unlock(mem->sem_cntr, "sem cntr unlock, err\n");
     }
-    
+
     // std::cout << "launched tagged msgs \n";
     // for (int i = 0; i < batch_n; i++) {
-    //   std::cout << name << " worker:: wait for n sub tasks:" << wait_sizes[i] << std::endl;
+    //   std::cout << name << " worker:: wait for n sub tasks:" << wait_sizes[i]
+    //   << std::endl;
     //   if (instr->type == SEND_BATCH) {
     //     this->_wait_cq(efa->txcq, wait_sizes[i]);
     //   } else {
@@ -442,7 +459,7 @@ class SHMWorker {
             break;
           case SEND_BATCH:
           case RECV_BATCH:
-            std::cout << "task SEND_BATCH/RECV_BATCH \n";
+            std::cout << std::to_string(rank) + "worker get task SEND_BATCH/RECV_BATCH \n";
             this->efa_send_recv_batch(efa_ep, i);
             break;
           case ERR_INSTR:
@@ -478,7 +495,6 @@ class SHMCommunicator {
   std::string ws_cntr_shm_name;
   std::string ws_efa_addr_shm_name;
   std::string ws_status_shm_name;
-  
 
   void* ws_instr_ptr;
   void* ws_cntr_ptr;
@@ -529,7 +545,8 @@ class SHMCommunicator {
     // create shm for data buffer for all workers
     int instr_fd = shm_open(ws_instr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
     int cntr_fd = shm_open(ws_cntr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
-    int efa_add_fd = shm_open(ws_efa_addr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+    int efa_add_fd =
+        shm_open(ws_efa_addr_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
     int worker_status_fd =
         shm_open(ws_status_shm_name.c_str(), O_CREAT | O_RDWR, 0666);
     int data_buf_fd = shm_open(data_buf_name.c_str(), O_CREAT | O_RDWR, 0666);
@@ -558,7 +575,7 @@ class SHMCommunicator {
                         data_buf_fd, 0);
     // set memory to all zero
     std::fill_n((char*)ws_instr_ptr, INSTR_SIZE * nw, 0);
-    std::cout << "created instruction memory size: " << INSTR_SIZE * nw << "\n";
+    std::cout << "created instruction memory size: " << INSTR_SIZE* nw << "\n";
     // ------------ workers shm part end
 
     // ------------ workers semaphore part
@@ -568,12 +585,12 @@ class SHMCommunicator {
           std::string("/" + name + SEM_SUFFIX_INSTR + std::to_string(i));
       std::string _cntr =
           std::string("/" + name + SEM_SUFFIX_CNTR + std::to_string(i));
-      std::string _efa_addr = std::string(
-          "/" + name + SEM_SUFFIX_EFA_ADDR + std::to_string(i));
+      std::string _efa_addr =
+          std::string("/" + name + SEM_SUFFIX_EFA_ADDR + std::to_string(i));
       std::string _w_status =
           std::string("/" + name + SEM_SUFFIX_W_STAT + std::to_string(i));
-      std::string _data_buf = std::string(
-          "/" + name + SEM_SUFFIX_DATA_BUF + std::to_string(i));
+      std::string _data_buf =
+          std::string("/" + name + SEM_SUFFIX_DATA_BUF + std::to_string(i));
       // open and create semaphores, init value to 1
       sem_t* _mtx_instr =
           sem_open(_instr.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 1);
@@ -710,8 +727,8 @@ class SHMCommunicator {
             size_t _size = *(size_t*)(instr->data + 4 + j * 16 + 8);
             *(unsigned long long*)(_w_instr_data_p + 4 + w_t_c * 16) = _offset;
             *(size_t*)(_w_instr_data_p + 4 + w_t_c * 16 + 8) = _size;
-            std::cout << "offset: " << _offset << ", size: " << _size 
-                      << "(" << i << ", " << j << ") \n";
+            std::cout << "offset: " << _offset << ", size: " << _size << "("
+                      << i << ", " << j << ") \n";
             // worker task counter ++
             w_t_c++;
           }
@@ -728,22 +745,24 @@ class SHMCommunicator {
       }
 
     } else {
-      for (int widx = 0; widx < nw; widx ++) {
+      for (int widx = 0; widx < nw; widx++) {
         char* _w_instr_p = (char*)ws_instr_ptr + widx * INSTR_SIZE;
         char* _w_instr_data_p = _w_instr_p + INSTR_OFFSET;
         // first 4 bytes for task count
         *(int*)_w_instr_data_p = n_batches;
-        std::cout << "comm:: n batches: " << n_batches << std::endl;
         // assign operation type
-        if (instr->type == SEND_BATCH)
+        if (instr->type == SEND_BATCH) {
+          std::cout << "comm::worker " << widx << "send " << n_batches
+                    << std::endl;
           *(int*)(_w_instr_p + 8) = reverse_map(SEND_BATCH);
-        else
+        } else {
+          std::cout << "comm::worker " << widx << "recv " << n_batches
+                    << std::endl;
           *(int*)(_w_instr_p + 8) = reverse_map(RECV_BATCH);
-        
+        }
         // compute offsets and sizes
-        for (int i = 0; i < n_batches; i ++) {
-          size_t _offset =
-                *(unsigned long long*)(instr->data + 4 + i * 16);
+        for (int i = 0; i < n_batches; i++) {
+          size_t _offset = *(unsigned long long*)(instr->data + 4 + i * 16);
           size_t _size = *(size_t*)(instr->data + 4 + i * 16 + 8);
 
           size_t _worker_size = _size / nw;
@@ -760,7 +779,6 @@ class SHMCommunicator {
         // assign timestamp
         *(double*)_w_instr_p = time_now();
       }
-
     }
     // unlock all
     for (int i = 0; i < nw; i++) {
@@ -785,8 +803,8 @@ class SHMCommunicator {
       // wait for splitting parameters case
       int _level = 0;
       while (_level < n_batches) {
-        bool _inc = true; // sync flag
-        for (int wid = 0; wid < nw; wid ++) {
+        bool _inc = true;  // sync flag
+        for (int wid = 0; wid < nw; wid++) {
           if (this->get_a_worker_cntr(wid) - _ws_cntrs[wid] <= _level) {
             _inc = false;
           }
@@ -794,9 +812,10 @@ class SHMCommunicator {
 
         if (_inc) {
           this->plus_one_self_cntr();
-          _level ++;
+          _level++;
           double e = time_now();
-          std::cout << "wait batch " << _level << " completion takes " << e - s << " s\n";
+          std::cout << name + " wait batch " << _level << " completion takes " << e - s
+                    << " s\n";
           s = e;
         } else {
           std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -845,7 +864,6 @@ class SHMCommunicator {
     }
   };
 };
-
 
 };  // namespace shm
 };  // namespace trans

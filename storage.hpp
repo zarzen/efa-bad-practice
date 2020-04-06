@@ -18,8 +18,8 @@ namespace store {
 template <typename T>
 class ThdSafeQueue {
  public:
-  ThdSafeQueue() {};
-  ~ThdSafeQueue() {};
+  ThdSafeQueue(){};
+  ~ThdSafeQueue(){};
 
   /**
    * \brief push an value into the end. threadsafe.
@@ -79,7 +79,7 @@ class Instr {
   }
 };
 
-class ParamStore; 
+class ParamStore;
 // communicator agent manage multiple communicators
 class CommAgent {
  public:
@@ -301,7 +301,7 @@ void StoreCli::pull(std::string& key,
   // =============== send ctl msg via TCP =================
   // send instr type
   char type[4];
-  *(int*)type = 0;
+  *(int*)type = 1; // read the type: 0 == PUSH; > 0 PULL
   sCli._send(type, 4);
 
   // send key length
@@ -348,13 +348,19 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
   ret = send(cli, local_addrs, addr_size, 0);
   check_err((ret != addr_size), "socket send err\n");
 
+  int sockErr = 0;
+  socklen_t errSize = sizeof(sockErr);
   // handle other instructions
-  while (!store->_exit) {
+  while (!store->_exit && getsockopt(cli, SOL_SOCKET, SO_ERROR, &sockErr, &errSize) >= 0) {
     Instr ins;
     ins.commIdx = commIdx;
     // read the type: 0 == PUSH; > 0 PULL
     char type[4];
-    read(cli, type, 4);
+    ret = read(cli, type, 4);
+    if (ret != 4) {
+      std::cerr << "cli " + std::to_string(cli) << " connection broken\n";
+      return; 
+    }
     ins.type = *(int*)type > 0 ? PULL : PUSH;
     // read len for key
     char keylen[4];
@@ -375,8 +381,11 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
       read(cli, s, 8);
       ins.bufs.push_back(*(size_t*)s);
     }
-
     store->taskq.push(ins);
+    std::string _msg("Got a request from cli " + std::to_string(cli) +
+                       " for comm " + std::to_string(commIdx) + " with type " +
+                       std::to_string(ins.type) + "\n");
+    std::cout << _msg;
   }
 };
 
@@ -502,14 +511,19 @@ void CommAgent::_setEFAInstr(Instr& ins) {
   // get buf
   std::vector<std::pair<size_t, size_t>> bufs;
   this->store->getBufs(ins, bufs);
+  if (ins.type == PUSH) {
+    // record the memory location for key
+    this->store->memStore[ins.key] = bufs;
+  }
+  std::cout << "CommAgent::_setEFAInstr bufs size: " + std::to_string(bufs.size()) + "\n";
   // write instruction to corresponding communicator mem
   trans::shm::shm_lock(commInstrMtxs[ins.commIdx],
                        "_setEFAInstr put inst: lock err");
   void* _instr_ptr = commInstrPtrs[ins.commIdx];
   *(int*)((char*)_instr_ptr + 8) = ops;
-  *(int*)((char*)_instr_ptr + 12) = ins.nBatch;
+  *(int*)((char*)_instr_ptr + 12) = bufs.size();
   char* _batch_data_s = (char*)_instr_ptr + 16;
-  for (int i = 0; i < ins.nBatch; i++) {
+  for (int i = 0; i < bufs.size(); i++) {
     *(size_t*)(_batch_data_s + i * 16) = bufs[i].first;
     *(size_t*)(_batch_data_s + i * 16 + 8) = bufs[i].second;
   }
@@ -523,10 +537,14 @@ void CommAgent::EFARecv(Instr& ins) {
 }
 
 void CommAgent::EFASend(Instr& ins) {
+  std::cout << "request key: " + ins.key +  "; Send params EFA\n";
   _setEFAInstr(ins);
 }
 
-ParamStore::ParamStore(std::string name, std::string port, size_t mem_size, int commNw) {
+ParamStore::ParamStore(std::string name,
+                       std::string port,
+                       size_t mem_size,
+                       int commNw) {
   this->storeName = name;
   this->port = port;
 
@@ -537,16 +555,21 @@ ParamStore::ParamStore(std::string name, std::string port, size_t mem_size, int 
       new CommAgent(commNw, name + "-cAgent", data_buf_name, mem_size, this);
 }
 
-ParamStore::~ParamStore(){}
+ParamStore::~ParamStore() {
+}
 
 void ParamStore::getBufs(Instr& ins,
                          std::vector<std::pair<size_t, size_t>>& bufs) {
+                          
   // if the key is not exist; need to move the cur pointer
+  
   auto _it = memStore.find(ins.key);
   if (_it != memStore.end()) {
+    std::cout << "ParamStore::getBufs key: " + ins.key + " exists\n";
     bufs = _it->second;
   } else {
     // key is not exist
+    std::cout << "ParamStore::getBufs key: " + ins.key + " not exist\n";
     for (size_t& bs : ins.bufs) {
       bufs.push_back(std::pair<size_t, size_t>(curOffset, bs));
       curOffset += bs;
