@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <condition_variable>
 
 #include "shm_common.h"
 #include "sock_cli_serv.h"
@@ -17,8 +18,8 @@ namespace store {
 template <typename T>
 class ThdSafeQueue {
  public:
-  ThreadsafeQueue() {}
-  ~ThreadsafeQueue() {}
+  ThdSafeQueue() {};
+  ~ThdSafeQueue() {};
 
   /**
    * \brief push an value into the end. threadsafe.
@@ -53,6 +54,14 @@ inline void check_err(bool cond, std::string msg) {
     std::cerr << msg;
 };
 
+void workerThd(std::string comm_name,
+               int nw,
+               int rank,
+               std::string data_buf_name,
+               size_t data_buf_size);
+
+void commThd(trans::shm::SHMCommunicator* comm);
+
 enum InstrType { PUSH, PULL };
 class Instr {
  public:
@@ -70,6 +79,7 @@ class Instr {
   }
 };
 
+class ParamStore; 
 // communicator agent manage multiple communicators
 class CommAgent {
  public:
@@ -263,7 +273,8 @@ void StoreCli::push(std::string& key,
   sCli._send(keylen, 4);
 
   // send key
-  auto keybuf = std::make_unique<char>(key.size());
+  // auto keybuf = std::make_unique<char>(key.size()); c++14
+  std::unique_ptr<char> keybuf(new char[key.size()]);
   memcpy(keybuf.get(), key.c_str(), key.size());
   sCli._send(keybuf.get(), key.size());
 
@@ -299,7 +310,8 @@ void StoreCli::pull(std::string& key,
   sCli._send(keylen, 4);
 
   // send key
-  auto keybuf = std::make_unique<char>(key.size());
+  // auto keybuf = std::make_unique<char>(key.size());
+  std::unique_ptr<char> keybuf(new char[key.size()]);
   memcpy(keybuf.get(), key.c_str(), key.size());
   sCli._send(keybuf.get(), key.size());
 
@@ -384,7 +396,7 @@ void instrHandlerThd(ParamStore* store) {
   }
 };
 
-void sockServThd(ParamStore* store, std::string& port) {
+void sockServThd(ParamStore* store, std::string port) {
   // always listen for new connections
   trans::SockServ serv(port);
   std::vector<std::thread> handles;
@@ -405,11 +417,11 @@ void commThd(trans::shm::SHMCommunicator* comm) {
   comm->run();
 };
 // run worker inside
-void workerThd(std::string& comm_name,
-               int& nw,
-               int& rank,
-               std::string& data_buf_name,
-               size_t& data_buf_size) {
+void workerThd(std::string comm_name,
+               int nw,
+               int rank,
+               std::string data_buf_name,
+               size_t data_buf_size) {
   trans::shm::SHMWorker w(comm_name, nw, rank, data_buf_name, data_buf_size);
   w.run();
 };
@@ -524,6 +536,8 @@ ParamStore::ParamStore(std::string name, std::string port, size_t mem_size, int 
   cAgent =
       new CommAgent(commNw, name + "-cAgent", data_buf_name, mem_size, this);
 }
+
+ParamStore::~ParamStore(){}
 
 void ParamStore::getBufs(Instr& ins,
                          std::vector<std::pair<size_t, size_t>>& bufs) {

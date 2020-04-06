@@ -14,7 +14,7 @@ void getRecvLoc(size_t& curOffset,
                 std::vector<std::pair<size_t, size_t>>& sendFrom,
                 std::vector<std::pair<size_t, size_t>>& recvTo);
 
-bool verifyData(void* memPtr,
+bool verifyData(char* memPtr,
                 std::vector<std::pair<size_t, size_t>>& sendFrom,
                 std::vector<std::pair<size_t, size_t>>& recvTo);
 
@@ -34,8 +34,8 @@ int main(int argc, char const* argv[]) {
 
   std::string modelKey = "resnet152-test";
 
-  std::unique_ptr<StoreCli> sCli =
-      std::make_unique<StoreCli>(cname, ip, port, cacheName, cacheSize, 4);
+  std::unique_ptr<StoreCli> sCli(
+      new StoreCli(cname, ip, port, cacheName, cacheSize, 4));
 
   void* dataPtr = openSHM(cacheName, cacheSize);
   std::vector<std::pair<size_t, size_t>> sendDataLoc;
@@ -62,7 +62,7 @@ int main(int argc, char const* argv[]) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     double e = trans::time_now();
-    bool v = verifyData(dataPtr, sendDataLoc, recvDataLoc);
+    bool v = verifyData((char*)dataPtr, sendDataLoc, recvDataLoc);
     if (v)
       std::cout << "data correct\n";
     else
@@ -110,9 +110,12 @@ size_t loadParamToSHM(void* memPtr,
                       std::vector<std::pair<size_t, size_t>>& dataLoc) {
   size_t _offset = 0;
   std::string dataDir("./pbatches/");
-  std::string bins[6] = {"batch-0-8344576.bin",  "batch-1-39426048.bin",
-                         "batch-2-44810240.bin", "batch-3-44810240.bin",
-                         "batch-4-77922304.bin", "batch-5-26071040.bin"};
+  std::string bins[6] = {"batch-0-8344576.bin",
+                         "batch-1-39426048.bin",
+                         "batch-2-44810240.bin",
+                         "batch-3-44810240.bin",
+                         "batch-4-77922304.bin",
+                         "batch-5-26071040.bin"};
   for (auto b : bins) {
     char* buf = (char*)memPtr + _offset;
     std::string datafile = dataDir + b;
@@ -154,7 +157,7 @@ bool verifyData(char* memPtr,
 }
 
 void clearData(void* memPtr, std::vector<std::pair<size_t, size_t>>& d) {
-  for (auto b:d){
+  for (auto b : d) {
     std::fill_n((char*)memPtr + b.first, b.second, 0);
   }
 }
