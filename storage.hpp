@@ -180,6 +180,8 @@ StoreCli::StoreCli(std::string cliName,
   this->nameOfCache = nameOfCache;
   cacheSize = sizeOfCache;
   this->nw = nw;  // num of workers for communicator
+
+  this->_init();
 }
 
 void StoreCli::_init() {
