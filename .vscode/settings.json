@@ -39,6 +39,9 @@
     "type_traits": "cpp",
     "utility": "cpp",
     "typeinfo": "cpp",
-    "cstring": "cpp"
+    "cstring": "cpp",
+    "atomic": "cpp",
+    "condition_variable": "cpp",
+    "iomanip": "cpp"
   }
 }

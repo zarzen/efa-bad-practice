@@ -41,6 +41,10 @@ int main(int argc, char const* argv[]) {
   std::vector<std::pair<size_t, size_t>> sendDataLoc;
   std::vector<std::pair<size_t, size_t>> recvDataLoc;
   size_t cacheOffset = loadParamToSHM(dataPtr, sendDataLoc);
+  if (cacheOffset == 0) {
+    std::cerr << "error happend while loading parameters\n";
+    return -1;
+  }
   size_t paramSize = cacheOffset;
   getRecvLoc(cacheOffset, sendDataLoc, recvDataLoc);
 
