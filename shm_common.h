@@ -239,7 +239,7 @@ class WorkerMemory {
     // un link
     shm_unlink(shm_instr.c_str());
     shm_unlink(shm_cntr.c_str());
-    shm_unlink(shm_data_buf.c_str());
+    // shm_unlink(shm_data_buf.c_str()); // this should not controlled by worker
     shm_unlink(shm_efa_addr.c_str());
     shm_unlink(shm_w_status.c_str());
 
@@ -862,7 +862,7 @@ class SHMCommunicator {
     for (int widx = 0; widx < nw; widx++) {
       char* _w_instr_p = (char*)ws_instr_ptr + widx * INSTR_SIZE;
       char* _w_instr_data_p = _w_instr_p + INSTR_OFFSET;
-      *(int*)(_w_instr_p + 8) = reverse_map(SHUTDOWN);
+      *(int*)(_w_instr_p + 8) = reverse_map(trans::shm::SHUTDOWN);
       // assign timestamp
       *(double*)_w_instr_p = time_now();
     }

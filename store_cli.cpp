@@ -1,7 +1,22 @@
 #include <fstream>
+#include <execinfo.h>
+#include <signal.h>
 
 #include "storage.hpp"
 #include "util.h"
+
+void seghandler(int sig) {
+  void *array[10];
+  size_t size;
+
+  // get void*'s for all entries on the stack
+  size = backtrace(array, 10);
+
+  // print out all the frames to stderr
+  fprintf(stderr, "Error: signal %d:\n", sig);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
 
 using namespace pipeps::store;
 
@@ -21,16 +36,17 @@ bool verifyData(char* memPtr,
 void clearData(void* memPtr, std::vector<std::pair<size_t, size_t>>& d);
 
 int main(int argc, char const* argv[]) {
-  if (argc < 5) {
+  signal(SIGSEGV, seghandler);
+  if (argc < 6) {
     std::cout
-        << "Usage: ./store_cli <dstIp> <dstPort> <cacheName> <cacheSize>\n";
+        << "Usage: ./store_cli <dstIp> <dstPort> <cacheName> <cacheSize> <cliName>\n";
     return -1;
   }
   std::string ip(argv[1]);
   std::string port(argv[2]);
   std::string cacheName(argv[3]);
   size_t cacheSize = std::stoull(argv[4]);
-  std::string cname("test-store-cli");
+  std::string cname(argv[5]);
 
   std::string modelKey = "resnet152-test";
 
@@ -82,6 +98,8 @@ int main(int argc, char const* argv[]) {
     clearData(dataPtr, recvDataLoc);
   }
 
+  // explicitly unlink shm
+  shm_unlink(cacheName.c_str());
   return 0;
 }
 

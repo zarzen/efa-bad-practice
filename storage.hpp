@@ -158,12 +158,15 @@ class StoreCli {
   sem_t* semCommInst;
   sem_t* semCommCntr;
 
+  trans::shm::SHMCommunicator* comm;
+
   StoreCli(std::string cliName,
            std::string servIP,
            std::string servPort,
            std::string nameOfCache,
            size_t sizeOfCache,
            int nw);
+  ~StoreCli();
   // internal init function
   void _init();
 
@@ -196,10 +199,33 @@ StoreCli::StoreCli(std::string cliName,
   this->_init();
 }
 
+StoreCli::~StoreCli(){
+  trans::shm::shm_lock(semCommInst,
+                       "cleanComm put inst: lock err");
+  // set the Instruction shutdown
+  void* _instr_ptr = shmCommInst;
+  *(int*)((char*)_instr_ptr + 8) = trans::shm::reverse_map(trans::shm::SHUTDOWN);
+  *(double*)_instr_ptr = trans::time_now();
+
+  trans::shm::shm_unlock(semCommInst,
+                         "cleanComm put inst: unlock err");
+  // 
+  while (true){
+    int _c = getCommCntr();
+    if (_c < 0) {
+      break;
+    } else {
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+  }
+  // delete newed object
+  delete comm;
+}
+
 void StoreCli::_init() {
   // create communicator
   std::string commName = name + "-storecli-comm";
-  trans::shm::SHMCommunicator* comm =
+  comm =
       new trans::shm::SHMCommunicator(nw, commName, nameOfCache, cacheSize);
   // create workers of communicators
   for (int i = 0; i < nw; i++) {
@@ -346,6 +372,8 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
   size_t ret = read(cli, peer_addrs, addr_size);
   check_err((ret != addr_size), "socket read size not match\n");
   int commIdx = store->cAgent->getCommunicator(peer_addrs, local_addrs);
+  // make sure communicator started
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   // send to remote
   ret = send(cli, local_addrs, addr_size, 0);
   check_err((ret != addr_size), "socket send err\n");
@@ -396,6 +424,7 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
 // this thread can be removed
 // this thread is intend to reduce the computation while receiving instructions
 void instrHandlerThd(ParamStore* store) {
+  std::cout << "ParamStore instrHandlerThd started\n";
   while (!store->_exit) {
     Instr* ins = new Instr();
     store->taskq.pop(ins);
