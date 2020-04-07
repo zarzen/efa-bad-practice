@@ -74,7 +74,7 @@ int sem_mutex_val(sem_t* s) {
   return v;
 };
 
-enum INSTR_T { ERR_INSTR, SET_EFA_ADDR, RECV_BATCH, SEND_BATCH };
+enum INSTR_T { ERR_INSTR, SET_EFA_ADDR, RECV_BATCH, SEND_BATCH, SHUTDOWN};
 
 class Instruction {
  public:
@@ -92,6 +92,8 @@ INSTR_T instr_map(int idx) {
       return RECV_BATCH;
     case 3:
       return SEND_BATCH;
+    case 4:
+      return SHUTDOWN;
     default:
       return ERR_INSTR;
   };
@@ -105,6 +107,8 @@ int reverse_map(INSTR_T t) {
       return 2;
     case SEND_BATCH:
       return 3;
+    case SHUTDOWN:
+      return 4;
     default:
       return -1;
   };
@@ -441,6 +445,10 @@ class SHMWorker {
     delete[] wait_sizes;
   };
 
+  void shutdown(){
+
+  }
+
   // main function of the shm worker
   void run() {
     while (1) {
@@ -462,6 +470,9 @@ class SHMWorker {
             std::cout << std::to_string(rank) + "worker get task SEND_BATCH/RECV_BATCH \n";
             this->efa_send_recv_batch(efa_ep, i);
             break;
+          case SHUTDOWN:
+            this->shutdown();
+            return;
           case ERR_INSTR:
             std::cerr << "err instr encountered \n";
             break;
@@ -842,6 +853,30 @@ class SHMCommunicator {
     return i;
   }
 
+  // shutdown command of all workers
+  void closeComm(){
+    // lock all workers
+    for (int i = 0; i < nw; i++) {
+      shm_lock(mtxs_instr[i], "lock, while closeComm\n");
+    }
+    for (int widx = 0; widx < nw; widx++) {
+      char* _w_instr_p = (char*)ws_instr_ptr + widx * INSTR_SIZE;
+      char* _w_instr_data_p = _w_instr_p + INSTR_OFFSET;
+      *(int*)(_w_instr_p + 8) = reverse_map(SHUTDOWN);
+      // assign timestamp
+      *(double*)_w_instr_p = time_now();
+    }
+    // unlock
+    for (int i = 0; i < nw; i++) {
+      shm_unlock(mtxs_instr[i], "unlock, while closeComm\n");
+    }
+
+    // set cntr to -1
+    shm_lock(mtx_comm_cntr, "lock :: shutdown set cntr to -1\n");
+    *(int*)comm_cntr_ptr = -1;
+    shm_unlock(mtx_comm_cntr, "unlock :: shutdown set cntr to -1\n");
+  }
+
   void run() {
     while (1) {
       Instruction* i = _read_instr();
@@ -852,6 +887,9 @@ class SHMCommunicator {
           case RECV_BATCH:
             this->send_recv_batch(i, false);
             break;
+          case SHUTDOWN:
+            this->closeComm();
+            return;
           default:
             std::cerr << "err instr encountered \n";
             break;
@@ -863,6 +901,23 @@ class SHMCommunicator {
       }
     }
   };
+
+  ~SHMCommunicator(){
+    // shm with workers will be destroyed
+
+    munmap(comm_instr_ptr, INSTR_SIZE);
+    munmap(comm_cntr_ptr, CNTR_SIZE);
+
+    // shm_comm_instr = std::string(name + "-comm-instr-mem");
+    // shm_comm_cntr = std::string(name + "-comm-cntr-mem");
+    shm_unlink(shm_comm_instr.c_str());
+    shm_unlink(shm_comm_cntr.c_str());
+
+    std::string sem_comm_instr("/" + name + "-comm-instr-mtx");
+    std::string sem_comm_cntr("/" + name + "-comm-cntr-mtx");
+    sem_unlink(sem_comm_instr.c_str());
+    sem_unlink(sem_comm_cntr.c_str());
+  }
 };
 
 };  // namespace shm

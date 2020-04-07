@@ -110,6 +110,8 @@ class CommAgent {
   // return the idx of new created communicator
   int getCommunicator(char* peerAddrs, char* commAddrs);
 
+  void cleanComm(int idx);
+
   // recv data through EFA
   // put recv instr in comms[commIdx]'s shm
   void EFARecv(Instr& ins);
@@ -359,7 +361,7 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
     ret = read(cli, type, 4);
     if (ret != 4) {
       std::cerr << "cli " + std::to_string(cli) << " connection broken\n";
-      return; 
+      break; 
     }
     ins.type = *(int*)type > 0 ? PULL : PUSH;
     // read len for key
@@ -387,6 +389,8 @@ void cliConnHandlerThd(ParamStore* store, int cli) {
                        std::to_string(ins.type) + "\n");
     std::cout << _msg;
   }
+  //
+  store->cAgent->cleanComm(commIdx);
 };
 
 // this thread can be removed
@@ -499,6 +503,29 @@ int CommAgent::getCommunicator(char* peerAddrs, char* commAddrs) {
 
   nComm++;
   return idx;
+}
+
+void CommAgent::cleanComm(int idx){
+  trans::shm::shm_lock(commInstrMtxs[idx],
+                       "cleanComm put inst: lock err");
+  // set the Instruction shutdown
+  void* _instr_ptr = commInstrPtrs[idx];
+  *(int*)((char*)_instr_ptr + 8) = trans::shm::reverse_map(trans::shm::SHUTDOWN);
+  *(double*)_instr_ptr = trans::time_now();
+
+  trans::shm::shm_unlock(commInstrMtxs[idx],
+                         "cleanComm put inst: unlock err");
+  // 
+  while (true){
+    trans::shm::shm_lock(commCntrMtxs[idx], "StoreCli::getCommCntr: lock err");
+    int _c = *(int*)commCntrPtrs[idx];
+    trans::shm::shm_unlock(commCntrMtxs[idx], "StoreCli::getCommCntr: unlock err");
+    if (_c < 0) {
+      break;
+    }
+  }
+  // delete the communicator to shm_unlink
+  delete commPtrs[idx];
 }
 
 void CommAgent::_setEFAInstr(Instr& ins) {
