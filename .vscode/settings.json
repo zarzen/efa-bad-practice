@@ -1,5 +1,6 @@
 {
   "C_Cpp.default.includePath": [
+      "./",
       "/opt/amazon/efa/include"
   ],
   "files.associations": {
