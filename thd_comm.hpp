@@ -4,6 +4,7 @@
 #include "spdlog/spdlog.h"
 #include "util.h"
 #include <iostream>
+#include <memory>
 
 namespace pipeps {
 
@@ -42,6 +43,7 @@ public:
 
 class ThdCommunicator {
 public:
+  const static int efaAddrSize{64};
   // for workers
   std::vector<std::thread> workerThds;
   std::vector<ThdSafeQueue<TransMsg> *> workerTaskQs;
@@ -54,7 +56,7 @@ public:
   std::string dstIP;
   std::string dstPort;
   bool ready{false}; // peer EFA addrs is not ready at first
-  char *localEFAAddrs;
+  char* efaAddrs;
   std::atomic<bool> cntr;
 
   ThdCommunicator(std::string listenPort, std::string dstIP,
@@ -79,10 +81,23 @@ public:
 
 ThdCommunicator::ThdCommunicator(std::string listenPort, std::string dstIP,
                                  std::string dstPort, int nw) {
+                                   efaAddrs = new char[nw * efaAddrSize];
                                    // start workers
-                                   // make sure 
+                                   // make sure EFA addr ready via addrReadyC
+                                   // launch socket listener
                                  };
 
+// send msg to workers to stop
+// set the communicator status to stop for socket thread to quit
+// wait for worker threads to join
+// wait for socket thread to stop
+// clean resource
+ThdCommunicator::~ThdCommunicator(){
+  //
+
+  // 
+  delete[] efaAddrs;
+};
 }; // namespace trans
 }; // namespace pipeps
 
