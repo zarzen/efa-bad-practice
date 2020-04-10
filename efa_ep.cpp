@@ -9,7 +9,7 @@ EFAEndpoint::EFAEndpoint(std::string nickname) {
 };
 
 int EFAEndpoint::init_res() {
-  struct fi_info *hints;
+  
   struct fi_cq_attr txcq_attr, rxcq_attr;
   struct fi_av_attr av_attr;
   int err;
@@ -115,6 +115,7 @@ EFAEndpoint::~EFAEndpoint() {
   fi_close((fid_t)domain);
   fi_close((fid_t)fabric);
   fi_freeinfo(fi);
+  fi_freeinfo(hints);
 };
 
 }; // namespace trans

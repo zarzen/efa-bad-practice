@@ -43,6 +43,15 @@
     "cstring": "cpp",
     "atomic": "cpp",
     "condition_variable": "cpp",
-    "iomanip": "cpp"
+    "iomanip": "cpp",
+    "cmath": "cpp",
+    "cstddef": "cpp",
+    "algorithm": "cpp",
+    "iterator": "cpp",
+    "memory": "cpp",
+    "memory_resource": "cpp",
+    "optional": "cpp",
+    "string": "cpp",
+    "string_view": "cpp"
   }
 }

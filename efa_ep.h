@@ -17,6 +17,7 @@ public:
   bool av_ready = false;
 
   struct fi_info *fi;
+  struct fi_info *hints;
   struct fid_fabric *fabric;
   struct fid_domain *domain;
   struct fid_av *av;
