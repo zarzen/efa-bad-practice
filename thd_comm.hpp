@@ -11,7 +11,7 @@
 namespace pipeps {
 
 enum MsgType {
-  EFA_ADDR_INFO,
+  INS_EFA_ADDR_INFO,
   SEND_ONE,
   SEND_BATCH,
   RECV_ONE,
@@ -19,16 +19,38 @@ enum MsgType {
   SHUTDOWN
 };
 
+inline const char* MsgTyepStr(MsgType& t) {
+  switch (t) {
+    case INS_EFA_ADDR_INFO:
+      return "INS_EFA_ADDR_INFO";
+    case SEND_ONE:
+      return "SEND_ONE";
+    case SEND_BATCH:
+      return "SEND_BATCH";
+    case RECV_ONE:
+      return "RECV_ONE";
+    case RECV_BATCH:
+      return "RECV_BATCH";
+    case SHUTDOWN:
+      return "SHUTDOWN";
+    default:
+      spdlog::error("MsgTyepStr::error:: Unknow type");
+      return "";
+  }
+};
+
 class TransMsg {
  public:
   MsgType t;
   char* data;
   size_t len;
+  double ts;
 
   TransMsg(MsgType _t, size_t data_len) {
     t = _t;
     data = new char[data_len];
     len = data_len;
+    ts = trans::time_now();
   };
 
   TransMsg(){};
@@ -37,6 +59,7 @@ class TransMsg {
     this->data = new char[obj.len];
     this->len = obj.len;
     this->t = obj.t;
+    this->ts = obj.ts;
     memcpy(this->data, obj.data, len);
   }
 
@@ -45,7 +68,7 @@ class TransMsg {
     t = obj.t;
     data = obj.data;
     len = obj.len;
-
+    ts = obj.ts;
     obj.data = nullptr;
   };
 
@@ -57,9 +80,10 @@ class TransMsg {
 
       // Copy the data pointer and its length from the
       // source object.
+      t = other.t;
       data = other.data;
       len = other.len;
-
+      ts = other.ts;
       // Release the data pointer from the source object so that
       // the destructor does not free the memory multiple times.
       other.data = nullptr;
@@ -101,8 +125,10 @@ class ThdCommunicator {
                   int nw);
   ~ThdCommunicator();
 
-  void asend(char* buf, size_t len);
-  void arecv(char* buf, size_t len);
+  void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
+  void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
+
+  void _sendTask(MsgType t, std::vector<std::pair<char*, size_t>>& dataLoc);
 
   // will be invoked at the first time asend/arecv is called
   // it is a block function will retry several times
@@ -137,20 +163,22 @@ ThdCommunicator::ThdCommunicator(std::string listenPort,
     std::atomic<size_t>* _wc = new std::atomic<size_t>();
     std::thread _wt(efaWorkerThdFun, _wn, i, _wtq, _wc, efaAddrs, addrReadyC);
     workerThds.push_back(std::move(_wt));
-
-    spdlog::debug("{:s} started worker {:s} in thread", this->name, _wn);
+    workerCntrs.push_back(_wc);
+    workerTaskQs.push_back(_wtq);
+    spdlog::info("{:s} started worker {:s} in thread", this->name, _wn);
   }
   // make sure EFA addr ready via addrReadyC
   while (*addrReadyC < nw) {
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
+  spdlog::info("workers' EFA addresses are ready");
   // launch socket listener
   sockThdPtr = new std::thread(socketListenerThdFun, this, listenPort, efaAddrs,
                                nw * efaAddrSize);
-  spdlog::debug("EFA address server started");
+  spdlog::info("EFA address server started");
   // launch cntr
   cntrThdPtr = new std::thread(cntrMonitorThdFun, this);
-  spdlog::debug("Communicator cntr update thread started");
+  spdlog::info("Communicator cntr update thread started");
 };
 
 // set the communicator status to stop for socket thread to quit
@@ -170,13 +198,13 @@ ThdCommunicator::~ThdCommunicator() {
   sockThdPtr->join();
   // 1: ======= end stopping socket Listener
 
-  // 2: =======
+  // 2: ======= wait for workers to complete
   for (int i = 0; i < nw; i++) {
     TransMsg _stop_msg(SHUTDOWN, 1);
     workerTaskQs[i]->push(std::move(_stop_msg));
     workerThds[i].join();
   }
-  // 2: =======
+  // 2: ======= wait for workers end
 
   // 3: stop wait cntr thd
   cntrThdPtr->join();
@@ -224,8 +252,78 @@ void ThdCommunicator::cntrMonitorThdFun(ThdCommunicator* comm) {
     if (inc) {
       comm->cntr += 1;
     }
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 };
+
+void ThdCommunicator::_sendTask(
+    MsgType t,
+    std::vector<std::pair<char*, size_t>>& dataLoc) {
+  for (int wi = 0; wi < this->nw; wi++) {
+    TransMsg msg(t, 4 + dataLoc.size() * 8);
+    // fill msg content
+    *(int*)msg.data = dataLoc.size();
+    spdlog::debug("assemble TransMsg of worker {:d}", wi);
+    for (int j = 0; j < dataLoc.size(); j++) {
+      char* _ptr = dataLoc[j].first;
+      size_t _size = dataLoc[j].second;
+      size_t _worker_size = _size / nw;
+      _ptr = _ptr + wi * _worker_size;
+      // last worker has more respon
+      if (wi == nw - 1) {
+        _worker_size += (_size - _worker_size * nw);
+      }
+      // save value of _ptr to char array
+      memcpy(msg.data + 4 + j * 16, &_ptr, 8);
+      *(size_t*)(msg.data + 4 + j * 16 + 8) = _worker_size;
+    }
+    workerTaskQs[wi]->push(std::move(msg));
+    spdlog::debug("TransMsg enqueued of worker {:d}", wi);
+  }
+}
+
+void ThdCommunicator::asendBatch(
+    std::vector<std::pair<char*, size_t>> dataLoc) {
+  while (!_ready) {
+    getPeerAddrs();
+  }
+
+  this->_sendTask(SEND_BATCH, dataLoc);
+}
+
+void ThdCommunicator::arecvBatch(
+    std::vector<std::pair<char*, size_t>> dataLoc) {
+  while (!_ready) {
+    getPeerAddrs();
+  }
+  _sendTask(RECV_BATCH, dataLoc);
+}
+
+bool ThdCommunicator::getPeerAddrs() {
+  try {
+    trans::SockCli sCli(dstIP, dstPort);
+    char* peerAddrs = new char[nw * efaAddrSize];
+    sCli._recv(peerAddrs, nw * efaAddrSize);
+    for (int wi = 0; wi < nw; wi++) {
+      char* _addr = peerAddrs + wi * efaAddrSize;
+      TransMsg m(INS_EFA_ADDR_INFO, efaAddrSize);
+      memcpy(m.data, _addr, efaAddrSize);
+      workerTaskQs[wi]->push(std::move(m));
+      spdlog::debug("INS_EFA_ADDR_INFO enqueued into task q of worker {:d}",
+                    wi);
+    }
+    // wait for insertion complete
+    // insert EFA addrs must be the first job to complete
+    while (this->cntr != 1) {
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+    spdlog::debug("worker all inserted peer Addrs");
+    _ready = true;
+  } catch (...) {
+    spdlog::error("Error occur while getPeerAddrs; should retry");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+}
 
 };  // namespace pipeps
 

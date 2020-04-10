@@ -7,7 +7,7 @@ SockCli::SockCli(std::string ip, std::string port) {
   struct sockaddr_in serv_addr;
   if ((client_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     printf("\n Socket creation error \n");
-    return;
+    throw "Socket creation error";
   }
   // set up server addr
   serv_addr.sin_family = AF_INET;
@@ -15,13 +15,13 @@ SockCli::SockCli(std::string ip, std::string port) {
   // Convert IPv4 and IPv6 addresses from text to binary form
   if (inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr) <= 0) {
     printf("\nInvalid address/ Address not supported \n");
-    return;
+    throw "Invalid address/ Address not supported";
   }
   // connect to server
   if (connect(client_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) <
       0) {
     printf("\nConnection Failed \n");
-    return;
+    throw "Connection Failed";
   }
 };
 

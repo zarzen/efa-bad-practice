@@ -1,4 +1,5 @@
 #include "efa_ep.h"
+#include <cstring>
 
 namespace trans {
 
