@@ -48,12 +48,10 @@ void efaWorkerThdFun(std::string workerName,
                      std::atomic<int>* addrReady) {
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
   while (true) {
-    TransMsg* msg = new TransMsg();
-    taskq->pop(msg.get());
+    TransMsg _m;
+    taskq->pop(&_m);
 
 
-    // clear
-    delete msg;
   }
 };
 };  // namespace pipeps

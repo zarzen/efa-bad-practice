@@ -24,6 +24,7 @@ class TransMsg {
   MsgType t;
   char* data;
   size_t len;
+
   TransMsg(MsgType _t, size_t data_len) {
     t = _t;
     data = new char[data_len];
@@ -39,6 +40,7 @@ class TransMsg {
     memcpy(this->data, obj.data, len);
   }
 
+  // move constructor
   TransMsg(TransMsg&& obj) {
     t = obj.t;
     data = obj.data;
@@ -47,13 +49,24 @@ class TransMsg {
     obj.data = nullptr;
   };
 
-  TransMsg& operator=(const TransMsg& other) {
-    std::cout << "customized assignment op \n";
-    this->t = other.t;
-    this->data = other.data;
-    this->len = other.len;
+  // move assignment operator
+  TransMsg& operator=(TransMsg&& other) {
+    if (this != &other) {
+      // Free the existing resource.
+      delete[] data;
+
+      // Copy the data pointer and its length from the
+      // source object.
+      data = other.data;
+      len = other.len;
+
+      // Release the data pointer from the source object so that
+      // the destructor does not free the memory multiple times.
+      other.data = nullptr;
+      other.len = 0;
+    }
     return *this;
-  };
+  }
 
   ~TransMsg() { delete[] data; }
 };
