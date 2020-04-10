@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <thread>
+#include <condition_variable>
 
 #define CHK_ERR(name, cond, err)                                               \
   do {                                                                         \
