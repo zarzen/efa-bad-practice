@@ -98,6 +98,7 @@ void _server() {
 int main(int argc, char* argv[]) {
   // Set global log level to debug
   spdlog::set_level(spdlog::level::debug);
+  spdlog::set_pattern("[%H:%M:%S.%f] [%^%l%$] [thread %t] %v");
   if (argc < 2) {
     spdlog::error("Usage: ./thd_ctest <client/server>");
     return -1;

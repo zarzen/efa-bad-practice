@@ -162,7 +162,7 @@ ThdCommunicator::ThdCommunicator(std::string listenPort,
   this->listenPort = listenPort;
   this->dstIP = dstIP;
   this->dstPort = dstPort;
-  this->name = listenPort + "comm";
+  this->name = "comm-" + listenPort;
 
   efaAddrs = new char[nw * efaAddrSize];
   addrReadyC = new std::atomic<int>(0);
