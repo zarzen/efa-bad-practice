@@ -31,7 +31,7 @@ SockCli::SockCli(const SockCli& s){
   this->client_sock = s.client_sock;
 }
 
-int SockCli::_send(char *buf, int len) {
+int SockCli::_send(const char *buf, int len) {
   return send(client_sock, buf, len, 0);
 };
 int SockCli::_recv(char *buf, int len) { return read(client_sock, buf, len); };
@@ -74,7 +74,7 @@ int SockServ::_listen() {
   return new_cli;
 };
 
-int SockServ::_send(char *buf, int len) { return send(new_cli, buf, len, 0); };
+int SockServ::_send(const char *buf, int len) { return send(new_cli, buf, len, 0); };
 
 int SockServ::_recv(char *buf, int len) { return read(new_cli, buf, len); };
 

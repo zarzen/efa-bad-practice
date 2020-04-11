@@ -92,6 +92,13 @@ target_link_libraries(store_serv ${LIBFABRIC_LIBRARY} pthread rt)
 add_executable(store_cli store_cli.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
 target_link_libraries(store_cli ${LIBFABRIC_LIBRARY} pthread rt)
 
+if(NOT TARGET spdlog)
+    # Stand-alone build
+    find_package(spdlog REQUIRED)
+endif()
+
+add_executable(thd_ctest thd_ctest.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp thd_comm.hpp)
+target_link_libraries(thd_ctest ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdlog)
 
 # add_executable(fi_rdm src/rdm.c ${common_files})
 # target_link_libraries(fi_rdm ${LIBFABRIC_LIBRARY})
