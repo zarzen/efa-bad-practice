@@ -9,7 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/thd_ctest",
-      "args": ["server"],
+      "args": ["server", "127.0.0.1"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],
