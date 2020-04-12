@@ -11,12 +11,12 @@ void genReceiverPtrs(char* recvBuf,
                      std::vector<std::pair<char*, size_t>>& paramLoc,
                      std::vector<std::pair<char*, size_t>>& recvLoc);
 
-void _client() {
-  std::string commDstIP("127.0.0.1");
+void _client(std::string& dstIP) {
+  std::string commDstIP(dstIP);
   std::string commDstPort("8111");
   std::string commEFAPort("8222");
 
-  std::string sockDstIP("127.0.0.1");
+  std::string sockDstIP(dstIP);
   std::string sockDstPort("8333");
 
   int nw = 4;
@@ -55,8 +55,8 @@ void _client() {
   delete[] recvBuf;
 };
 
-void _server() {
-  std::string commDstIP("127.0.0.1");
+void _server(std::string targetIP) {
+  std::string commDstIP(targetIP);
   std::string commDstPort("8222");
   std::string commEFAPort("8111");
   std::string sockPort("8333");
@@ -99,15 +99,16 @@ int main(int argc, char* argv[]) {
   // Set global log level to debug
   spdlog::set_level(spdlog::level::debug);
   spdlog::set_pattern("[%H:%M:%S.%f] [%^%l%$] [thread %t] %v");
-  if (argc < 2) {
-    spdlog::error("Usage: ./thd_ctest <client/server>");
+  if (argc < 3) {
+    spdlog::error("Usage: ./thd_ctest <client/server> <peer-ip>");
     return -1;
   }
   std::string mode(argv[1]);
+  std::string peerIP(argv[2]);
   if (mode == "client") {
-    _client();
+    _client(peerIP);
   } else {
-    _server();
+    _server(peerIP);
   }
 
   return 0;
