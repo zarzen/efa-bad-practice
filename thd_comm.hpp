@@ -22,7 +22,7 @@ enum MsgType {
   SHUTDOWN
 };
 
-inline const char* MsgTyepStr(MsgType& t) {
+inline std::string MsgTyepStr(MsgType& t) {
   switch (t) {
     case INS_EFA_ADDR_INFO:
       return "INS_EFA_ADDR_INFO";
@@ -56,7 +56,7 @@ class TransMsg {
     ts = trans::time_now();
   };
 
-  TransMsg(){};
+  TransMsg():data(nullptr){};
 
   TransMsg(const TransMsg& obj) {
     this->data = new char[obj.len];
@@ -95,7 +95,11 @@ class TransMsg {
     return *this;
   }
 
-  ~TransMsg() { delete[] data; }
+  ~TransMsg() { 
+    if (data != nullptr){
+      delete[] data;
+    }
+  }
 };
 
 void efaWorkerThdFun(std::string workerName,
@@ -124,8 +128,8 @@ class ThdCommunicator {
   std::string dstPort;
   bool _ready{false};  // peer EFA addrs is not ready at first
   char* efaAddrs;
-  std::atomic<size_t> cntr;
-  std::atomic<bool> exit;
+  std::atomic<size_t> cntr{0};
+  std::atomic<bool> exit{false};
   std::thread* sockThdPtr;
   std::thread* cntrThdPtr;
 
@@ -176,6 +180,7 @@ ThdCommunicator::ThdCommunicator(std::string listenPort,
     workerCntrs.push_back(_wc);
     workerTaskQs.push_back(_wtq);
     spdlog::info("{:s} started worker {:s} in thread", this->name, _wn);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
   // make sure EFA addr ready via addrReadyC
   while (*addrReadyC < nw) {
@@ -203,9 +208,10 @@ ThdCommunicator::~ThdCommunicator() {
 
   // 1: ======= hack to stop the socketListener
   trans::SockCli cli("127.0.0.1", listenPort);
-  std::unique_ptr<char> _t(new char[nw * efaAddrSize]);
-  cli._recv(_t.get(), nw * efaAddrSize);
+  char* _t = new char[nw * efaAddrSize];
+  cli._recv(_t, nw * efaAddrSize);
   sockThdPtr->join();
+  delete[] _t;
   // 1: ======= end stopping socket Listener
 
   // 2: ======= wait for workers to complete
@@ -237,40 +243,48 @@ void ThdCommunicator::socketListenerThdFun(ThdCommunicator* comm,
                                            char* addrsBuf,
                                            size_t addrsLen) {
   trans::SockServ serv(port);
+  spdlog::debug("socketListenerThdFun listend at {:s}", port);
   while (!comm->exit) {
     // quick hack to stop this thread:
     // set the comm->exit = true;
     // then connect to this sock and recv
     int cli_fd = serv._listen();  // here will block;
+    spdlog::debug("socketListenerThdFun got a connection sock fd: {:d}", cli_fd);
     size_t ret = send(cli_fd, addrsBuf, addrsLen, 0);
     if (ret == -1) {
       spdlog::critical("Err, while sending out EFA addrs");
     }
   }
+  spdlog::info("socketListenerThdFun exit");
 };
 
 void ThdCommunicator::cntrMonitorThdFun(ThdCommunicator* comm) {
+  spdlog::info("cntrMonitorThdFun started");
   while (!comm->exit) {
     bool inc = true;
     // this is bounded because of the task splitting
     // check whether all worker cntrs greater than current communicator cntr
     for (auto c_ptr : comm->workerCntrs) {
+      // spdlog::debug("comm cntr: {:d}, worker cntr {:d}", comm->cntr, *c_ptr);
       if (*c_ptr <= comm->cntr) {
         inc = false;
       }
     }
     if (inc) {
       comm->cntr += 1;
+      spdlog::debug("cntrMonitorThdFun increase communicator cntr to {:d}", comm->cntr);
     }
     std::this_thread::sleep_for(std::chrono::microseconds(100));
+
   }
+  spdlog::info("cntrMonitorThdFun ended");
 };
 
 void ThdCommunicator::_sendTask(
     MsgType t,
     std::vector<std::pair<char*, size_t>>& dataLoc) {
   for (int wi = 0; wi < this->nw; wi++) {
-    TransMsg msg(t, 4 + dataLoc.size() * 8);
+    TransMsg msg(t, 4 + dataLoc.size() * 16);
     // fill msg content
     *(int*)msg.data = dataLoc.size();
     spdlog::debug("assemble TransMsg of worker {:d}", wi);
@@ -297,7 +311,7 @@ void ThdCommunicator::asendBatch(
   while (!_ready) {
     getPeerAddrs();
   }
-
+  spdlog::debug("asendBatch EFA addrs are ready");
   this->_sendTask(SEND_BATCH, dataLoc);
 }
 
@@ -306,12 +320,15 @@ void ThdCommunicator::arecvBatch(
   while (!_ready) {
     getPeerAddrs();
   }
+  spdlog::debug("arecvBatch EFA addrs are ready");
   _sendTask(RECV_BATCH, dataLoc);
 }
 
 bool ThdCommunicator::getPeerAddrs() {
+  spdlog::debug("enter ThdCommunicator::getPeerAddrs");
   try {
     trans::SockCli sCli(dstIP, dstPort);
+    spdlog::debug("connected to {:s}:{:s}", dstIP, dstPort);
     char* peerAddrs = new char[nw * efaAddrSize];
     sCli._recv(peerAddrs, nw * efaAddrSize);
     for (int wi = 0; wi < nw; wi++) {
@@ -324,7 +341,7 @@ bool ThdCommunicator::getPeerAddrs() {
     }
     // wait for insertion complete
     // insert EFA addrs must be the first job to complete
-    while (this->cntr != 1) {
+    while (*addrReadyC < 2 * nw) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     spdlog::debug("worker all inserted peer Addrs");
@@ -363,7 +380,7 @@ void workerWaitCq(std::string& caller, fid_cq* cq, int count) {
     completed++;
 
     double cost_t = trans::time_now() - s;
-    spdlog::debug("{:s} completes {:d} job cost: {:lf} ms", caller, completed,
+    spdlog::debug("{:s} completes {:d} job cost: {:f} ms", caller, completed,
                   cost_t * 1e3);
     s = trans::time_now();  // update start time
   }
@@ -397,16 +414,20 @@ void efaWorkerThdFun(std::string workerName,
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
   char* addrPtr = efaAddrs + rank * pipeps::ThdCommunicator::efaAddrSize;
   efa_ep.get_name(addrPtr, pipeps::ThdCommunicator::efaAddrSize);
-  addrReady += 1;
-  spdlog::debug("{:s} :: EFA address ready");
+  char readable[64];
+  size_t len = 64;
+  fi_av_straddr(efa_ep.av, addrPtr, readable, &len);
+  (*addrReady) += 1;
+  spdlog::debug("{:s} :: EFA address ready {:s}", workerName, readable);
 
   bool exit = false;
-  spdlog::debug("{:s} :: Event process loop start");
+  spdlog::debug("{:s} :: Event process loop start", workerName);
   while (!exit) {
     TransMsg _msg;
     taskq->pop(&_msg);
-    spdlog::debug("{:s} got task {:s} delayed {:lf}s", workerName,
-                  MsgTyepStr(_msg.t), trans::time_now() - _msg.ts);
+    std::string _tstr = MsgTyepStr(_msg.t);
+    spdlog::debug("{:s} got task {:s} delayed {:f} s", workerName,
+                  _tstr, trans::time_now() - _msg.ts);
 
     switch (_msg.t) {
       case SHUTDOWN:
@@ -415,7 +436,10 @@ void efaWorkerThdFun(std::string workerName,
       case INS_EFA_ADDR_INFO: {
         efa_ep.insert_peer_address(_msg.data);
         verifyEFAPeerAddr(efa_ep);
-        (*cntr)++;  // inidcate the insertion done
+        spdlog::debug("{:s} EFA peer addrs verify DONE", workerName);
+        (*addrReady) += 1; // increase again to indicate peer inserted
+        // (*cntr)++;  // inidcate the insertion done
+        // spdlog::debug("{:s} increase worker cntr to {:d}", workerName, (*cntr));
         break;
       }
       case SEND_ONE:
@@ -433,7 +457,7 @@ void efaWorkerThdFun(std::string workerName,
         break;
     }
   }
-  spdlog::debug("{:s} :: Exit event loop");
+  spdlog::debug("{:s} :: Exit event loop", workerName);
 };
 
 void workerConvertMsg(TransMsg& msg,
@@ -450,7 +474,7 @@ void workerConvertMsg(TransMsg& msg,
     size_t _size = *(size_t*)(_pairData + 8);
     ptrs.push_back(std::make_pair(_ptr, _size));
   }
-  spdlog::debug("workerConvertMsg cost: {:lf}", trans::time_now() - start);
+  spdlog::debug("workerConvertMsg cost: {:f} s", trans::time_now() - start);
 }
 
 void fi_tsend_or_trecv(MsgType& mType,
@@ -484,6 +508,7 @@ void efaSendRecv(trans::EFAEndpoint& efa,
 
   // process send/recv tasks
   for (int i = 0; i < dataLoc.size(); i++) {
+    double _ts = trans::time_now();
     // for each batch
     void* _ptr = dataLoc[i].first;
     size_t _size = dataLoc[i].second;
@@ -514,6 +539,8 @@ void efaSendRecv(trans::EFAEndpoint& efa,
                   efa.nickname, n_subtasks, i);
     workerWaitCq(efa.nickname, cq, n_subtasks);
     (*cntr)++;  // increase worker counter
+    spdlog::debug("{:s} :: data block {:d} cost {:f} s",
+                  efa.nickname, i, trans::time_now() - _ts);
   }
 }
 

@@ -45,11 +45,11 @@ void _client() {
     size_t target = curC + recvLoc.size();
     comm.arecvBatch(recvLoc);
     while (comm.cntr != target) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     double dur = trans::time_now() - ts;
     double bw = ((paramSize * 8) / dur) / 1e9;
-    spdlog::info("_client bw : {:lf}, dur: {:lf}", bw, dur);
+    spdlog::info("_client bw : {:f}, dur: {:f}", bw, dur);
   }
   delete[] paramBuf;
   delete[] recvBuf;
@@ -85,11 +85,11 @@ void _server() {
     size_t target = curC + paramLoc.size();
     comm.asendBatch(paramLoc);
     while (comm.cntr != target) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     double dur = trans::time_now() - ts;
     double bw = ((paramSize * 8) / dur) / 1e9;
-    spdlog::info("_server bw : {:lf}, dur: {:lf}", bw, dur);
+    spdlog::info("_server bw : {:f}, dur: {:f}", bw, dur);
   }
 
   delete[] paramBuf;
