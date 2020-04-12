@@ -1,5 +1,6 @@
 #include <fstream>
 #include <thread>
+#include <sys/mman.h>
 #include "sock_cli_serv.h"
 #include "thd_comm.hpp"
 
@@ -28,6 +29,8 @@ void _client(std::string& dstIP) {
   size_t bufSize = 1 * 1024UL * 1024UL * 1024UL;
   char* paramBuf = new char[bufSize];
   char* recvBuf = new char[bufSize];
+  mlock(paramBuf, bufSize);
+  mlock(recvBuf, bufSize);
   std::vector<std::pair<char*, size_t>> paramLoc;
   std::vector<std::pair<char*, size_t>> recvLoc;
   size_t paramSize = load_params(paramBuf, paramLoc);
@@ -76,6 +79,7 @@ void _server(std::string targetIP) {
 
   size_t bufSize = 1 * 1024UL * 1024UL * 1024UL;
   char* paramBuf = new char[bufSize];
+  mlock(paramBuf, bufSize);
   std::vector<std::pair<char*, size_t>> paramLoc;
   size_t paramSize = load_params(paramBuf, paramLoc);
   spdlog::info("data and buffer preparement DONE");
