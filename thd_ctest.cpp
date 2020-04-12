@@ -11,6 +11,8 @@ void genReceiverPtrs(char* recvBuf,
                      std::vector<std::pair<char*, size_t>>& paramLoc,
                      std::vector<std::pair<char*, size_t>>& recvLoc);
 
+bool verifyData(char* d1, char* d2, size_t len);
+
 void _client(std::string& dstIP) {
   std::string commDstIP(dstIP);
   std::string commDstPort("8111");
@@ -51,6 +53,13 @@ void _client(std::string& dstIP) {
     double bw = ((paramSize * 8) / dur) / 1e9;
     spdlog::info("_client bw : {:f}, dur: {:f}", bw, dur);
   }
+  bool v = verifyData(paramBuf, recvBuf, paramSize);
+  if (v) {
+    spdlog::info("data verification passed");
+  } else {
+    spdlog::error("data verification failed");
+  }
+
   delete[] paramBuf;
   delete[] recvBuf;
 };
@@ -165,4 +174,13 @@ void genReceiverPtrs(char* recvBuf,
     _offset += p.second;
     recvLoc.push_back(std::make_pair(recv_p, p.second));
   }
+}
+
+bool verifyData(char* d1, char* d2, size_t len){
+  for (size_t i = 0; i < len; i++){
+    if (*(d1+i) != *(d2+i)) {
+      return false;
+    }
+  }
+  return true;
 }
