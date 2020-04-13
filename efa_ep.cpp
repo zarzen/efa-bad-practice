@@ -90,6 +90,7 @@ int EFAEndpoint::init_res() {
   if (err < 0)
     std::cerr << "fi_enable err " << err << "\n";
   ep_ready = true;
+  return err;
 };
 
 void EFAEndpoint::get_name(char *name_buf, int size) {
