@@ -14,9 +14,6 @@ const int ERRNO_TCP = 1;
 #include "tcp.h"
 
 
-namespace balance {
-namespace util {
-
 using namespace std;
 
 TcpServer::TcpServer(string address, int port, int listen_num):
@@ -214,6 +211,3 @@ TcpAgent(0), _address(address), _port(port) {
 TcpClient::~TcpClient() {
     ;
 }
-
-} //namespace util
-} //namespace balance

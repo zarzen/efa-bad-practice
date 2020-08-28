@@ -6,8 +6,6 @@
 #include <string>
 #include <memory>
 
-namespace balance {
-namespace util {
 
 class TcpServer;
 class TcpAgent;
@@ -52,8 +50,5 @@ private:
     std::string _address;
     int _port;
 };
-
-} //namespace util
-} //namespace balance
 
 #endif
