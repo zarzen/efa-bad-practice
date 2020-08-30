@@ -495,7 +495,7 @@ void efaSendRecv(trans::EFAEndpoint& efa,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
                  std::atomic<size_t>* cntr) {
   //
-  size_t slice_threshold = 64 * 1024;  // 64K
+  size_t slice_threshold = 1024 * 1024;  // 1MB
   int task_seq = 0;
   // std::vector<int> waitSizes;
   // get task specific cq
