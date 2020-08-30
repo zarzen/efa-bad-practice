@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <sys/mman.h>
 
-int nw = 4;
+int nw = 8;
 size_t blockSize =  32 * 1024 * 1024;
 int nBlock = 8;
 
