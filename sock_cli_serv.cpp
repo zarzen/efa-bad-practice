@@ -1,5 +1,6 @@
 
 #include "sock_cli_serv.h"
+#include "spdlog/spdlog.h"
 
 namespace trans {
 
@@ -18,9 +19,8 @@ SockCli::SockCli(std::string ip, std::string port) {
     throw "Invalid address/ Address not supported";
   }
   // connect to server
-  if (connect(client_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) <
-      0) {
-    printf("\nConnection Failed \n");
+  if (connect(client_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    spdlog::error("Connection Failed");
     throw "Connection Failed";
   }
 };

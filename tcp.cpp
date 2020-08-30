@@ -74,7 +74,7 @@ TcpAgent::TcpAgent(int conn_fd, struct sockaddr_in addr): _conn_fd(conn_fd), _ad
 
 std::string TcpAgent::getIP() {
   struct in_addr ipAddr = this->_addr.sin_addr;
-  char str[INET_ADDRSTRLEN];
+  char str[INET_ADDRSTRLEN+1] = {'\0'};
   inet_ntop( AF_INET, &ipAddr, str, INET_ADDRSTRLEN);
   return std::string(str, INET_ADDRSTRLEN);
 }

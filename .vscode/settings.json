@@ -1,6 +1,7 @@
 {
   "C_Cpp.default.includePath": [
       "./",
+      "/opt/amazon/efa/include",
       "/usr/local/Cellar/spdlog/1.7.0_1/include",
       "/usr/local/Cellar/libfabric/1.9.0/include"
   ],

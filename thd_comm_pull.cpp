@@ -1,20 +1,26 @@
 #include "thd_comm.hpp"
 #include "tcp.h"
 #include <string>
+#include <cstdlib>
+
+int nw = 4;
+size_t blockSize =  32 * 1024 * 1024;
+int nBlock = 10;
 
 void runAsCli(int EFAListen, std::string dstSockAddr, int dstSockPort){
   char* recvBuff = new char[1024 * 1024 * 1024UL];
 
   TcpClient toServer(dstSockAddr, dstSockPort);
   std::string efaPortStr = std::to_string(EFAListen);
-  toServer.tcpSend(efaPortStr.c_str(), sizeof(int));
+  spdlog::debug("sending local EFA listen port {:d}", EFAListen);
+  toServer.tcpSend((char*)&EFAListen, sizeof(int));
   char buff[4] = {'\0'};
   toServer.tcpRecv(buff, sizeof(int));
-  pipeps::ThdCommunicator comm(efaPortStr, dstSockAddr, std::string(buff, sizeof(int)), 4);
+  int dstEFAPort = *(int*)buff;
+  spdlog::debug("received dst EFA port {:d}", dstEFAPort);
+  pipeps::ThdCommunicator comm(efaPortStr, dstSockAddr, std::to_string(dstEFAPort), nw);
 
   // start receiving
-  size_t blockSize =  32 * 1024 * 1024;
-  int nBlock = 8;
   std::vector<std::pair<char*, size_t>> recvTo;
   for (int i = 0; i < nBlock; i++) {
     char* dataBuff = recvBuff + i * blockSize;
@@ -43,15 +49,14 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, int EFAListen, char* memBuff, 
   char buf[4] = {'\0'};
   // exchange port for EFA address fetch
   cli->tcpRecv(buf, sizeof(int));
-  int dstPort = std::atoi(buf);
-  std::string efaPortStr = std::to_string(EFAListen);
-  cli->tcpSend(efaPortStr.c_str(), sizeof(int));
+  int dstPort = *(int*)buf;
+  spdlog::debug("received port for EFA connection {:d}", dstPort);
+  cli->tcpSend((char*)&EFAListen, sizeof(int));
 
   std::string dstIP = cli->getIP();
-  pipeps::ThdCommunicator comm(efaPortStr, dstIP, std::to_string(dstPort), 4);
+  spdlog::info("client ip addr {:s}", dstIP);
+  pipeps::ThdCommunicator comm(std::to_string(EFAListen), dstIP, std::to_string(dstPort), nw);
 
-  size_t blockSize =  32 * 1024 * 1024;
-  int nBlock = 8;
   std::vector<std::pair<char*, size_t>> sendFrom;
   for (int i = 0; i < nBlock; i++) {
     char* dataBuff = memBuff + i * blockSize;
@@ -85,10 +90,13 @@ void runAsServer(int sockPort) {
   size_t step = 250UL * 1024UL * 1024UL;
 
   TcpServer server("0.0.0.0", listenPort);
-
+  spdlog::info("server started");
+  std::vector<std::thread> cliThds;
   while (true) {
     std::shared_ptr<TcpAgent> cli = server.tcpAccept();
+    spdlog::info("accepted one client");
     std::thread handleThd(serverSendThd, cli, EFAListenPort, memBuff, offset);
+    cliThds.push_back(std::move(handleThd));
 
     EFAListenPort++;
     offset += step;
@@ -96,6 +104,10 @@ void runAsServer(int sockPort) {
 }
 
 int main(int argc, char* argv[]){
+  if(const char* env_p = std::getenv("DEBUG_THIS")) {
+    spdlog::set_level(spdlog::level::debug);
+  }
+
   if (argc < 2) {
     spdlog::error("running mode required, [cli/serv]");
     return -1;

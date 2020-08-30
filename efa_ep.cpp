@@ -3,7 +3,7 @@
 
 namespace trans {
 
-EFAEndpoint::EFAEndpoint(std::string nickname) { 
+EFAEndpoint::EFAEndpoint(std::string nickname): fi(nullptr) { 
   this->nickname = nickname; 
   init_res();
 };
@@ -30,12 +30,12 @@ int EFAEndpoint::init_res() {
   // SAS
   hints->rx_attr->msg_order = FI_ORDER_SAS;
   hints->tx_attr->msg_order = FI_ORDER_SAS;
-  err = fi_getinfo(FI_VERSION(1, 9), NULL, NULL, 0, hints, &fi);
+  err = fi_getinfo(FI_VERSION(1, 9), nullptr, 0, 0, hints, &fi);
   if (err < 0)
-    std::cerr << "fi_getinfo err " << err << "\n";
+    spdlog::error("fi_getinfo err {}", err);
 
   // fi_freeinfo(hints);
-  std::cout << "Using OFI device: " << fi->fabric_attr->name << "\n";
+  spdlog::debug("Using OFI device: {:s}", fi->fabric_attr->name);
 
   // init fabric, domain, address-vector,
   err = fi_fabric(fi->fabric_attr, &fabric, NULL);
@@ -62,10 +62,8 @@ int EFAEndpoint::init_res() {
   err = fi_cq_open(domain, &rxcq_attr, &rxcq, NULL);
   if (err < 0)
     std::cerr << "fi_rxcq_open err " << err << "\n";
-  std::cout << "--- fi->tx_attr-size: " 
-            << fi->tx_attr->size << "\n"
-            << "--- fi->rx_attr->size: "
-            << fi->rx_attr->size << "\n";
+  
+  spdlog::debug("fi->tx_attr-size: {}; fi->rx_attr->size: {}", fi->tx_attr->size, fi->rx_attr->size);
 
   // open endpoint
   err = fi_endpoint(domain, fi, &ep, NULL);

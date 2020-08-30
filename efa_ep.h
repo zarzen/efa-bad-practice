@@ -7,6 +7,7 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
+#include "spdlog/spdlog.h"
 
 namespace trans {
 

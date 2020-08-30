@@ -179,8 +179,8 @@ ThdCommunicator::ThdCommunicator(std::string listenPort,
     workerThds.push_back(std::move(_wt));
     workerCntrs.push_back(_wc);
     workerTaskQs.push_back(_wtq);
-    spdlog::info("{:s} started worker {:s} in thread", this->name, _wn);
-    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    spdlog::info("{:s} started worker {:s} ", this->name, _wn);
+    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
   // make sure EFA addr ready via addrReadyC
   while (*addrReadyC < nw) {
