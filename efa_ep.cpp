@@ -27,6 +27,8 @@ int EFAEndpoint::init_res() {
   // get provider
   hints->ep_attr->type = FI_EP_RDM;
   hints->fabric_attr->prov_name = strdup(provider.c_str());
+  hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+  hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
   // SAS
   hints->rx_attr->msg_order = FI_ORDER_SAS;
   hints->tx_attr->msg_order = FI_ORDER_SAS;
