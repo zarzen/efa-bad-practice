@@ -5,7 +5,7 @@
 
 int nw = 4;
 size_t blockSize =  32 * 1024 * 1024;
-int nBlock = 10;
+int nBlock = 8;
 
 void runAsCli(int EFAListen, std::string dstSockAddr, int dstSockPort){
   char* recvBuff = new char[1024 * 1024 * 1024UL];
@@ -40,7 +40,7 @@ void runAsCli(int EFAListen, std::string dstSockAddr, int dstSockPort){
 
     size_t totalSize = nBlock * blockSize;
     double bw = ((totalSize * 8) / dur) / 1e9;
-    spdlog::info("client [{:d}] send bw : {:f}, dur: {:f}", EFAListen, bw, dur);
+    spdlog::info("client [{:d}] recv bw : {:f}, dur: {:f}s, total size {}", EFAListen, bw, dur, totalSize);
   }
 }
 
