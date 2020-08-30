@@ -60,17 +60,6 @@ message( ${LIBFABRIC_LIBRARY} )
 
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_executable(nothd_cli demo_nothd_cli.cpp util.cpp efa_ep.cpp sock_cli_serv.cpp)
-target_link_libraries(nothd_cli ${LIBFABRIC_LIBRARY} pthread rt)
-add_executable(nothd_serv demo_nothd_serv.cpp util.cpp efa_ep.cpp sock_cli_serv.cpp)
-target_link_libraries(nothd_serv ${LIBFABRIC_LIBRARY} pthread rt)
-
-
-add_executable(store_serv store_serv.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
-target_link_libraries(store_serv ${LIBFABRIC_LIBRARY} pthread rt)
-
-add_executable(store_cli store_cli.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp)
-target_link_libraries(store_cli ${LIBFABRIC_LIBRARY} pthread rt)
 
 if(NOT TARGET spdlog)
     # Stand-alone build
@@ -80,5 +69,5 @@ endif()
 add_executable(thd_ctest thd_ctest.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp thd_comm.hpp)
 target_link_libraries(thd_ctest ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdlog)
 
-add_executable(thd_comm_pull thd_comm_pull.cpp tcp.cpp efa_ep.cpp thd_comm.hpp)
+add_executable(thd_comm_pull thd_comm_pull.cpp tcp.cpp efa_ep.cpp thd_comm.hpp sock_cli_serv.cpp util.cpp)
 target_link_libraries(thd_comm_pull ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdlog)
