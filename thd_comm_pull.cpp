@@ -2,6 +2,7 @@
 #include "tcp.h"
 #include <string>
 #include <cstdlib>
+#include <sys/mman.h>
 
 int nw = 4;
 size_t blockSize =  32 * 1024 * 1024;
@@ -38,6 +39,7 @@ void cliRecvThd(std::string efaPort, std::string dstSockAddr, int dstEFAPort, ch
 void runAsCli(std::vector<std::pair<std::string, int>>& servers){
 
   char* recvBuff = new char[10 * 1024 * 1024 * 1024UL];
+  mlock(recvBuff, 10 * 1024 * 1024 * 1024UL);
   size_t chunkSize = 500 * 1024 * 1024UL;
   int startPort = 20000;
 
@@ -109,9 +111,10 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, int EFAListen, char* memBuff, 
 void runAsServer(int sockPort) {
   int listenPort = sockPort;
   int EFAListenPort = 10000;
-  char* memBuff = new char[1024UL * 1024UL * 1024UL];
+  char* memBuff = new char[10 * 1024UL * 1024UL * 1024UL];
+  mlock(memBuff, 10 * 1024UL * 1024UL * 1024UL);
   size_t offset = 0;
-  size_t step = 250UL * 1024UL * 1024UL;
+  size_t step = 500UL * 1024UL * 1024UL;
 
   TcpServer server("0.0.0.0", listenPort);
   spdlog::info("server started");
