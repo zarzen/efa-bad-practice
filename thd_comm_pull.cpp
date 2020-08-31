@@ -8,7 +8,7 @@ int nw = 8;
 size_t blockSize =  32 * 1024 * 1024;
 int nBlock = 8;
 
-void cliRecvThd(std::string efaPort, pipeps::ThdCommunicator& comm, char* recvBuff){
+void cliRecvThd(std::string efaPort, pipeps::ThdCommunicator* comm, char* recvBuff){
 
   // start receiving
   std::vector<std::pair<char*, size_t>> recvTo;
@@ -18,11 +18,11 @@ void cliRecvThd(std::string efaPort, pipeps::ThdCommunicator& comm, char* recvBu
   }
   while (true) {
     double startTime = trans::time_now();
-    size_t target_cntr = comm.cntr + recvTo.size();
-    comm.arecvBatch(recvTo);
+    size_t target_cntr = comm->cntr + recvTo.size();
+    comm->arecvBatch(recvTo);
 
     // wait for completion
-    while (comm.cntr != target_cntr) {
+    while (comm->cntr != target_cntr) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     // compute bw and output
@@ -59,9 +59,9 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
     char* memPtr = recvBuff + serverCntr * chunkSize;
     pipeps::ThdCommunicator* _c = new pipeps::ThdCommunicator(std::to_string(EFAListen), 
                                                                 sp.first, 
-                                                                std::to_string(sp.second),
+                                                                std::to_string(dstEFAPort),
                                                                 nw);
-    std::thread recv(cliRecvThd, std::to_string(EFAListen), *_c, memPtr);
+    std::thread recv(cliRecvThd, std::to_string(EFAListen), _c, memPtr);
     recvThds.push_back(std::move(recv));
     comms.push_back(_c);
 
