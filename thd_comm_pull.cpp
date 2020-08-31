@@ -8,9 +8,7 @@ int nw = 8;
 size_t blockSize =  32 * 1024 * 1024;
 int nBlock = 8;
 
-void cliRecvThd(std::string efaPort, std::string dstSockAddr, int dstEFAPort, char* recvBuff){
-
-  pipeps::ThdCommunicator comm(efaPort, dstSockAddr, std::to_string(dstEFAPort), nw);
+void cliRecvThd(std::string efaPort, pipeps::ThdCommunicator& comm, char* recvBuff){
 
   // start receiving
   std::vector<std::pair<char*, size_t>> recvTo;
@@ -45,6 +43,7 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
 
   std::vector<TcpClient> sockToServ;
   std::vector<std::thread> recvThds;
+  std::vector<pipeps::ThdCommunicator*> comms;
   int serverCntr = 0;
   for (auto sp : servers) {
     
@@ -58,8 +57,13 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
     spdlog::debug("received dst EFA port {:d}", dstEFAPort);
 
     char* memPtr = recvBuff + serverCntr * chunkSize;
-    std::thread recv(cliRecvThd, std::to_string(EFAListen), sp.first, dstEFAPort, memPtr);
+    pipeps::ThdCommunicator* _c = new pipeps::ThdCommunicator(std::to_string(EFAListen), 
+                                                                sp.first, 
+                                                                std::to_string(sp.second),
+                                                                nw);
+    std::thread recv(cliRecvThd, std::to_string(EFAListen), *_c, memPtr);
     recvThds.push_back(std::move(recv));
+    comms.push_back(_c);
 
     serverCntr ++;
   }
