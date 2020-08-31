@@ -34,7 +34,7 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
   char remote_ep_addrs[64] = {};
   char readable[64] = {};
 
-  efa->get_name(local_ep_addrs, addr_size);
+  efa->getAddr(local_ep_addrs, addr_size);
   size_t len = 64;
   fi_av_straddr(efa->av, local_ep_addrs, readable, &len);
   std::cout << "Local ep addresses: \n"
@@ -49,7 +49,7 @@ void cli_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpoi
 
   // insert remote addrs
   fi_av_insert(efa->av, remote_ep_addrs, 1, &(efa->peer_addr), 0, NULL);
-  efa->av_ready = true;
+  efa->peerReady = true;
 
   // verify
   char name_buf[addr_size];

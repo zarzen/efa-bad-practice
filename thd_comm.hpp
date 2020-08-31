@@ -413,7 +413,7 @@ void efaWorkerThdFun(std::string workerName,
                      std::atomic<int>* addrReady) {
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
   char* addrPtr = efaAddrs + rank * pipeps::ThdCommunicator::efaAddrSize;
-  efa_ep.get_name(addrPtr, pipeps::ThdCommunicator::efaAddrSize);
+  efa_ep.getAddr(addrPtr, pipeps::ThdCommunicator::efaAddrSize);
   char readable[64];
   size_t len = 64;
   fi_av_straddr(efa_ep.av, addrPtr, readable, &len);
@@ -434,7 +434,7 @@ void efaWorkerThdFun(std::string workerName,
         exit = true;
         break;
       case INS_EFA_ADDR_INFO: {
-        efa_ep.insert_peer_address(_msg.data);
+        efa_ep.insertPeerAddr(_msg.data);
         verifyEFAPeerAddr(efa_ep);
         spdlog::debug("{:s} EFA peer addrs verify DONE", workerName);
         (*addrReady) += 1; // increase again to indicate peer inserted

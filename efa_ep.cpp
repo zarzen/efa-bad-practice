@@ -1,23 +1,35 @@
 #include "efa_ep.h"
+
+#include <rdma/fi_tagged.h>
+
 #include <cstring>
 
 namespace trans {
 
-EFAEndpoint::EFAEndpoint(std::string nickname): fi(nullptr) { 
-  this->nickname = nickname; 
-  init_res();
+void HandleCQError(struct fid_cq* cq) {
+  struct fi_cq_err_entry err_entry;
+  spdlog::error("Error while checking completion");
+  int ret = fi_cq_readerr(cq, &err_entry, 1);
+  char _err_buf[128];
+  fi_cq_strerror(cq, err_entry.prov_errno, err_entry.err_data, _err_buf, 128);
+  ERR_CHK(ret < 0,
+          "Error while calling fi_cq_readerr, err code {:d}, err msg {:s}", ret,
+          _err_buf);
+}
+
+EFAEndpoint::EFAEndpoint(std::string nickname) : fi(nullptr) {
+  this->nickname = nickname;
+  initialize();
 };
 
-int EFAEndpoint::init_res() {
-  
+int EFAEndpoint::initialize() {
   struct fi_cq_attr txcq_attr, rxcq_attr;
   struct fi_av_attr av_attr;
   int err;
   std::string provider = "efa";
 
   hints = fi_allocinfo();
-  if (!hints)
-    std::cerr << "fi_allocinfo err " << -ENOMEM << "\n";
+  ERR_CHK(!hints, "fi_allocinfo err {}", -ENOMEM);
 
   // clear all buffers
   memset(&txcq_attr, 0, sizeof(txcq_attr));
@@ -33,25 +45,22 @@ int EFAEndpoint::init_res() {
   hints->rx_attr->msg_order = FI_ORDER_SAS;
   hints->tx_attr->msg_order = FI_ORDER_SAS;
   err = fi_getinfo(FI_VERSION(1, 9), nullptr, 0, 0, hints, &fi);
-  if (err < 0)
-    spdlog::error("fi_getinfo err {}", err);
+  ERR_CHK(err < 0, "fi_getinfo err {} ", err);
 
   // fi_freeinfo(hints);
   spdlog::debug("Using OFI device: {:s}", fi->fabric_attr->name);
 
   // init fabric, domain, address-vector,
   err = fi_fabric(fi->fabric_attr, &fabric, NULL);
-  if (err < 0)
-    std::cerr << "fi_fabric err " << err << "\n";
+  ERR_CHK(err < 0, "fi_fabric err {} ", err);
+
   err = fi_domain(fabric, fi, &domain, NULL);
-  if (err < 0)
-    std::cerr << "fi_domain err " << err << "\n";
+  ERR_CHK(err < 0, "fi_domain err {} ", err);
 
   av_attr.type = fi->domain_attr->av_type;
   av_attr.count = 1;
   err = fi_av_open(domain, &av_attr, &av, NULL);
-  if (err < 0)
-    std::cerr << "fi_av_open err " << err << "\n";
+  ERR_CHK(err < 0, "fi_av_open err {} ", err);
 
   // open complete queue
   txcq_attr.format = FI_CQ_FORMAT_TAGGED;
@@ -59,54 +68,100 @@ int EFAEndpoint::init_res() {
   rxcq_attr.format = FI_CQ_FORMAT_TAGGED;
   rxcq_attr.size = fi->rx_attr->size;
   err = fi_cq_open(domain, &txcq_attr, &txcq, NULL);
-  if (err < 0)
-    std::cerr << "fi_txcq_open err " << err << "\n";
+  ERR_CHK(err < 0, "fi_txcq_open err {} ", err);
+
   err = fi_cq_open(domain, &rxcq_attr, &rxcq, NULL);
-  if (err < 0)
-    std::cerr << "fi_rxcq_open err " << err << "\n";
-  
-  spdlog::debug("fi->tx_attr-size: {}; fi->rx_attr->size: {}", fi->tx_attr->size, fi->rx_attr->size);
+  ERR_CHK(err < 0, "fi_rxcq_open err {} ", err);
 
   // open endpoint
   err = fi_endpoint(domain, fi, &ep, NULL);
-  if (err < 0)
-    std::cerr << "fi_endpoint err " << err << "\n";
+  ERR_CHK(err < 0, "fi_endpoint err {} ", err);
 
   // bind complete queue, address vector to endpoint
   err = fi_ep_bind(ep, (fid_t)txcq, FI_SEND);
-  if (err < 0)
-    std::cerr << "fi_ep_bind txcq err " << err << "\n";
+  ERR_CHK(err < 0, "fi_ep_bind txcq err {} ", err);
+
   err = fi_ep_bind(ep, (fid_t)rxcq, FI_RECV);
-  printf("%s rxcq : %p\n", this->nickname.c_str(), rxcq);
-  if (err < 0)
-    std::cerr << "fi_ep_bind rxcq err " << err << "\n";
-  // printf("%s bind txcq %p; rxcq %p;\n", nickname.c_str(), txcq, rxcq);
+  ERR_CHK(err < 0, "fi_ep_bind rxcq err {} ", err);
+
   err = fi_ep_bind(ep, (fid_t)av, 0);
-  if (err < 0)
-    std::cerr << "fi_ep_bind av err " << err << "\n";
+  ERR_CHK(err < 0, "fi_ep_bind av err {} ", err);
 
   // enable endpoint
   err = fi_enable(ep);
-  if (err < 0)
-    std::cerr << "fi_enable err " << err << "\n";
-  ep_ready = true;
+  ERR_CHK(err < 0, "fi_enable err {} ", err);
+
+  selfReady = true;
   return err;
 };
 
-void EFAEndpoint::get_name(char *name_buf, int size) {
+void EFAEndpoint::getAddr(char* name_buf, int size) {
   int err = 0;
   size_t len = size;
   err = fi_getname((fid_t)ep, name_buf, &len);
-  if (err < 0)
-    std::cerr << "fi_getname err " << err << "\n";
+  ERR_CHK(err < 0, "fi_getname err {} ", err);
 };
 
-void EFAEndpoint::insert_peer_address(char *addr) {
+void EFAEndpoint::insertPeerAddr(char* addr) {
   int ret = 0;
   ret = fi_av_insert(av, addr, 1, &peer_addr, 0, NULL);
-  if (ret != 1)
-    std::cerr << "fi_av_insert " << ret << "\n";
+  ERR_CHK(ret != 1, "fi_av_insert {}", ret);
+  this->peerReady = true;
 };
+
+int EFAEndpoint::waitCQ(fid_cq* cq, int count) {
+  struct fi_cq_err_entry entry;
+  int ret, completed = 0;
+  while (completed < count) {
+    ret = fi_cq_read(cq, &entry, 1);
+    if (ret == -FI_EAGAIN) {
+      continue;
+    }
+
+    if (ret == -FI_EAVAIL) {
+      HandleCQError(cq);
+    }
+    ERR_CHK(ret < 0, "{:s} fi_cq_read err", this->nickname);
+    completed++;
+  }
+  return completed;
+}
+
+int EFAEndpoint::send(const void* buf, size_t len, uint64_t tag) {
+  this->isend(buf, len, tag);
+  return this->syncSend();
+};
+
+int EFAEndpoint::isend(const void* buf, size_t len, uint64_t tag) {
+  ERR_CHK(selfReady && peerReady, "isend error, selfReady {}, peerReady {}",
+          selfReady, peerReady);
+  this->sendCntr++;
+  return fi_tsend(this->ep, buf, len, NULL, this->peer_addr, tag, NULL);
+}
+
+int EFAEndpoint::syncSend() {
+  int completed = this->waitCQ(this->txcq, this->sendCntr);
+  this->sendCntr -= completed;
+  return completed;
+}
+
+int EFAEndpoint::recv(void* buf, size_t len, uint64_t tag) {
+  this->irecv(buf, len, tag);
+  this->syncRecv();
+}
+
+int EFAEndpoint::irecv(void* buf, size_t len, uint64_t tag) {
+  ERR_CHK(selfReady && peerReady, "irecv error, selfReady {}, peerReady {}",
+          selfReady, peerReady);
+  this->recvCntr++;
+  return fi_trecv(this->ep, buf, len, NULL, this->peer_addr, tag, 0, NULL);
+}
+
+int EFAEndpoint::syncRecv() {
+  int completed = this->waitCQ(this->rxcq, this->recvCntr);
+  this->recvCntr -= completed;
+  return completed;
+}
 
 EFAEndpoint::~EFAEndpoint() {
   fi_close((fid_t)ep);
@@ -119,4 +174,4 @@ EFAEndpoint::~EFAEndpoint() {
   fi_freeinfo(hints);
 };
 
-}; // namespace trans
+};  // namespace trans
