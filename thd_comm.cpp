@@ -267,37 +267,6 @@ bool ThdCommunicator::getPeerAddrs() {
 
 // =================== end of ThdCommunicator implementations ======
 
-void workerWaitCq(std::string& caller, fid_cq* cq, int count) {
-  struct fi_cq_err_entry entry;
-  int ret, completed = 0;
-  double s = trans::time_now();
-  while (completed < count) {
-    ret = fi_cq_read(cq, &entry, 1);
-    if (ret == -FI_EAGAIN) {
-      continue;
-    }
-
-    if (ret == -FI_EAVAIL) {
-      spdlog::error("Error while checking completion");
-      ret = fi_cq_readerr(cq, &entry, 1);
-      char _err_buf[100];
-      fi_cq_strerror(cq, entry.prov_errno, entry.err_data, _err_buf, 100);
-      spdlog::error(
-          "Error while calling fi_cq_readerr, err code {:d}, err msg {:s}", ret,
-          _err_buf);
-    }
-
-    if (ret < 0)
-      spdlog::error("{:s} fi_cq_read err", caller);
-    completed++;
-
-    double cost_t = trans::time_now() - s;
-    spdlog::debug("{:s} completes {:d} job cost: {:f} ms", caller, completed,
-                  cost_t * 1e3);
-    s = trans::time_now();  // update start time
-  }
-};
-
 void workerConvertMsg(trans::TransTask& msg,
                       std::vector<std::pair<void*, size_t>>& ptrs);
 
@@ -429,7 +398,6 @@ void efaSendRecv(EFAEndpoint& efa,
       task_seq++;
     }
     syncTask(efa, task);
-    // workerWaitCq(efa.nickname, cq, n_subtasks);
     (*cntr)++;  // increase worker counter
     spdlog::debug("{:s} :: data block {:d} cost {:f} s", efa.getName(), i,
                   trans::time_now() - _ts);
