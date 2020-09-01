@@ -13,6 +13,8 @@
 
 namespace trans {
 
+static std::string RAND_STR = "zxcvbnmlkjhgfdsaqwertyuiop0987654321";
+
 enum TaskType {
   INS_EFA_ADDR_INFO,
   SEND_ONE,
@@ -110,6 +112,14 @@ void efaWorkerThdFun(std::string workerName,
                      std::atomic<int>* addrReady);
 
 class ThdCommunicator {
+
+  std::string listenPort;
+
+  void init();
+  void startEFAWorkers(int nw);
+  void randomName();
+  void waitLocalAddrs();
+
  public:
   const static int efaAddrSize{64};
   // for workers
@@ -123,10 +133,10 @@ class ThdCommunicator {
   // communicator vars
   std::string name;
   int nw;
-  std::string listenPort;
+
   std::string dstIP;
   std::string dstPort;
-  bool _ready{false};  // peer EFA addrs is not ready at first
+  bool peerAddrReady{false};  // peer EFA addrs is not ready at first
   char* efaAddrs;
   std::atomic<size_t> cntr{0};
   std::atomic<bool> exit{false};
@@ -137,6 +147,9 @@ class ThdCommunicator {
                   std::string dstIP,
                   std::string dstPort,
                   int nw);
+
+  ThdCommunicator(int nw);
+
   ~ThdCommunicator();
 
   void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
@@ -148,6 +161,9 @@ class ThdCommunicator {
   // it is a block function will retry several times
   // set ready = true;
   bool getPeerAddrs();
+
+  void setListenPort(std::string port);
+  void setPeer(std::string ip, std::string port);
 
   // always listening for others to query
   static void socketListenerThdFun(ThdCommunicator* comm,
