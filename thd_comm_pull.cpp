@@ -1,9 +1,8 @@
 #include <sys/mman.h>
 #include <cstdlib>
 #include <string>
-#include "thd_comm.hpp"
 #include "tcp.h"
-
+#include "thd_comm.hpp"
 
 int nw = 8;
 size_t blockSize = 32 * 1024 * 1024;
@@ -88,7 +87,7 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli,
     comm.setSliceSize(slice);
     spdlog::info("set trans slice to be {}", slice);
   }
-  
+
   int EFAListen = comm.getListenPort();
 
   char buf[4] = {'\0'};
