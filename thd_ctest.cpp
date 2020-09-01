@@ -23,7 +23,7 @@ void _client(std::string& dstIP) {
   std::string sockDstPort("8333");
 
   int nw = 4;
-  pipeps::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);
+  trans::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);
   spdlog::info("_client Created ThdCommunicator");
 
   size_t bufSize = 1 * 1024UL * 1024UL * 1024UL;
@@ -74,7 +74,7 @@ void _server(std::string targetIP) {
   std::string sockPort("8333");
 
   int nw = 4;
-  pipeps::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);
+  trans::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);
   spdlog::info("_server Created ThdCommunicator");
 
   size_t bufSize = 1 * 1024UL * 1024UL * 1024UL;

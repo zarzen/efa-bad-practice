@@ -11,7 +11,7 @@
 #include "spdlog/spdlog.h"
 #include "util.h"
 
-namespace pipeps {
+namespace trans {
 
 enum MsgType {
   INS_EFA_ADDR_INFO,
@@ -386,7 +386,7 @@ void workerWaitCq(std::string& caller, fid_cq* cq, int count) {
   }
 };
 
-void workerConvertMsg(pipeps::TransMsg& msg,
+void workerConvertMsg(trans::TransMsg& msg,
                       std::vector<std::pair<void*, size_t>>& ptrs);
 
 void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
@@ -401,7 +401,7 @@ void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
 };
 
 void efaSendRecv(trans::EFAEndpoint& efa,
-                 pipeps::TransMsg& msg,
+                 trans::TransMsg& msg,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
                  std::atomic<size_t>* cntr);
 
@@ -412,8 +412,8 @@ void efaWorkerThdFun(std::string workerName,
                      char* efaAddrs,
                      std::atomic<int>* addrReady) {
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
-  char* addrPtr = efaAddrs + rank * pipeps::ThdCommunicator::efaAddrSize;
-  efa_ep.getAddr(addrPtr, pipeps::ThdCommunicator::efaAddrSize);
+  char* addrPtr = efaAddrs + rank * trans::ThdCommunicator::efaAddrSize;
+  efa_ep.getAddr(addrPtr, trans::ThdCommunicator::efaAddrSize);
   char readable[64];
   size_t len = 64;
   fi_av_straddr(efa_ep.av, addrPtr, readable, &len);
@@ -544,6 +544,6 @@ void efaSendRecv(trans::EFAEndpoint& efa,
   }
 }
 
-};  // namespace pipeps
+};  // namespace trans
 
 #endif
