@@ -1,15 +1,17 @@
+#include <sys/mman.h>
+#include <cstdlib>
+#include <string>
 #include "thd_comm.hpp"
 #include "tcp.h"
-#include <string>
-#include <cstdlib>
-#include <sys/mman.h>
+
 
 int nw = 8;
-size_t blockSize =  32 * 1024 * 1024;
+size_t blockSize = 32 * 1024 * 1024;
 int nBlock = 8;
 
-void cliRecvThd(std::string efaPort, trans::ThdCommunicator* comm, char* recvBuff){
-
+void cliRecvThd(std::string efaPort,
+                trans::ThdCommunicator* comm,
+                char* recvBuff) {
   // start receiving
   std::vector<std::pair<char*, size_t>> recvTo;
   for (int i = 0; i < nBlock; i++) {
@@ -26,11 +28,16 @@ void cliRecvThd(std::string efaPort, trans::ThdCommunicator* comm, char* recvBuf
 
     size_t totalSize = nBlock * blockSize;
     double bw = ((totalSize * 8) / dur) / 1e9;
-    spdlog::info("client [{:s}] recv bw : {:f}, dur: {:f}s, total size {}", efaPort, bw, dur, totalSize);
+    spdlog::info("client [{:s}] recv bw : {:f}, dur: {:f}s, total size {}",
+                 efaPort, bw, dur, totalSize);
   }
 }
 
-void runAsCli(std::vector<std::pair<std::string, int>>& servers){
+void runAsCli(std::vector<std::pair<std::string, int>>& servers) {
+  if (const char* env_p = std::getenv("COMM_NW")) {
+    nw = std::stoi(env_p);
+    spdlog::info("setup comm-nw {}", nw);
+  }
 
   char* recvBuff = new char[10 * 1024 * 1024 * 1024UL];
   // mlock(recvBuff, 10 * 1024 * 1024 * 1024UL);
@@ -41,36 +48,47 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
   std::vector<trans::ThdCommunicator*> comms;
   int serverCntr = 0;
   for (auto sp : servers) {
-
     trans::ThdCommunicator* _c = new trans::ThdCommunicator(nw);
+    if (const char* env_p = std::getenv("COMM_SLICE")) {
+      size_t slice = std::stoul(env_p);
+      _c->setSliceSize(slice);
+      spdlog::info("set trans slice to be {}", slice);
+    }
     int EFAListen = _c->getListenPort();
     TcpClient toServer(sp.first, sp.second);
     spdlog::debug("sending local EFA listen port {:d}", EFAListen);
     toServer.tcpSend((char*)&EFAListen, sizeof(int));
     char buff[4] = {'\0'};
     toServer.tcpRecv(buff, sizeof(int));
-    int dstEFAPort = *(int*)buff; 
+    int dstEFAPort = *(int*)buff;
     spdlog::debug("received dst EFA port {:d}", dstEFAPort);
 
     char* memPtr = recvBuff + serverCntr * chunkSize;
-    
+
     _c->setPeer(sp.first, dstEFAPort);
 
     std::thread recv(cliRecvThd, std::to_string(EFAListen), _c, memPtr);
     recvThds.push_back(std::move(recv));
     comms.push_back(_c);
 
-    serverCntr ++;
+    serverCntr++;
   }
 
   for (size_t i = 0; i < recvThds.size(); i++) {
     recvThds[i].join();
   }
-
 }
 
-void serverSendThd(std::shared_ptr<TcpAgent> cli, char* memBuff, size_t offset) {
+void serverSendThd(std::shared_ptr<TcpAgent> cli,
+                   char* memBuff,
+                   size_t offset) {
   trans::ThdCommunicator comm(nw);
+  if (const char* env_p = std::getenv("COMM_SLICE")) {
+    size_t slice = std::stoul(env_p);
+    comm.setSliceSize(slice);
+    spdlog::info("set trans slice to be {}", slice);
+  }
+  
   int EFAListen = comm.getListenPort();
 
   char buf[4] = {'\0'};
@@ -103,10 +121,13 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, char* memBuff, size_t offset) 
     double bw = ((totalSize * 8) / dur) / 1e9;
     spdlog::info("server [{:d}] send bw : {:f}, dur: {:f}", EFAListen, bw, dur);
   }
-
 }
 
 void runAsServer(int sockPort) {
+  if (const char* env_p = std::getenv("COMM_NW")) {
+    nw = std::stoi(env_p);
+    spdlog::info("setup comm-nw {}", nw);
+  }
   int listenPort = sockPort;
   char* memBuff = new char[10 * 1024UL * 1024UL * 1024UL];
   // mlock(memBuff, 10 * 1024UL * 1024UL * 1024UL);
@@ -126,8 +147,8 @@ void runAsServer(int sockPort) {
   }
 }
 
-int main(int argc, char* argv[]){
-  if(const char* env_p = std::getenv("DEBUG_THIS")) {
+int main(int argc, char* argv[]) {
+  if (const char* env_p = std::getenv("DEBUG_THIS")) {
     spdlog::set_level(spdlog::level::debug);
   }
 
@@ -148,12 +169,12 @@ int main(int argc, char* argv[]){
     }
     std::vector<std::pair<std::string, int>> servers;
     for (int i = 0; i < numServers; i++) {
-      std::string servAddr(argv[3+i*2]);
-      int servPort = std::atoi(argv[4+i*2]);
+      std::string servAddr(argv[3 + i * 2]);
+      int servPort = std::atoi(argv[4 + i * 2]);
       servers.push_back(std::make_pair(servAddr, servPort));
     }
     runAsCli(servers);
-  }else if (mode == "serv") {
+  } else if (mode == "serv") {
     if (argc < 3) {
       spdlog::error("running in serv mode requires: localSocketPort");
       return -1;

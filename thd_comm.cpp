@@ -53,15 +53,14 @@ void ThdCommunicator::init() {
 void ThdCommunicator::startEFAWorkers(int nw) {
   // start workers
   for (int i = 0; i < nw; i++) {
-    std::string _wn = this->name + "-worker-" + std::to_string(i);
-    ThdSafeQueue<TransTask>* _wtq = new ThdSafeQueue<TransTask>();
-    std::atomic<size_t>* _wc = new std::atomic<size_t>();
-    std::thread _wt(efaWorkerThdFun, _wn, i, _wtq, _wc, efaAddrs, addrReadyC);
+    std::string workerName = this->name + "-worker-" + std::to_string(i);
+    ThdSafeQueue<TransTask>* taskQ = new ThdSafeQueue<TransTask>();
+    std::atomic<size_t>* cntr = new std::atomic<size_t>();
+    std::thread _wt(efaWorkerThdFun, workerName, i, taskQ, cntr, efaAddrs, addrReadyC, this);
     workerThds.push_back(std::move(_wt));
-    workerCntrs.push_back(_wc);
-    workerTaskQs.push_back(_wtq);
-    spdlog::debug("{:s} started worker {:s} ", this->name, _wn);
-    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    workerCntrs.push_back(cntr);
+    workerTaskQs.push_back(taskQ);
+    spdlog::debug("{:s} started worker {:s} ", this->name, workerName);
   }
 }
 
@@ -279,14 +278,16 @@ void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
 void efaSendRecv(trans::EFAEndpoint& efa,
                  trans::TransTask& msg,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
-                 std::atomic<size_t>* cntr);
+                 std::atomic<size_t>* cntr,
+                 size_t slice_threshold);
 
 void efaWorkerThdFun(std::string workerName,
                      int rank,
                      ThdSafeQueue<TransTask>* taskq,
                      std::atomic<size_t>* cntr,
                      char* efaAddrs,
-                     std::atomic<int>* addrReady) {
+                     std::atomic<int>* addrReady,
+                     ThdCommunicator* comm) {
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
   char* addrPtr = efaAddrs + rank * trans::ThdCommunicator::efaAddrSize;
   efa_ep.getAddr(addrPtr, trans::ThdCommunicator::efaAddrSize);
@@ -323,7 +324,7 @@ void efaWorkerThdFun(std::string workerName,
         std::vector<std::pair<void*, size_t>> dataLoc;
         workerConvertMsg(_msg, dataLoc);
         // this is a synchronize fun
-        efaSendRecv(efa_ep, _msg, dataLoc, cntr);
+        efaSendRecv(efa_ep, _msg, dataLoc, cntr, comm->getSliceSize());
         break;
       }
       default:
@@ -373,8 +374,9 @@ void syncTask(EFAEndpoint& efa, TransTask& task) {
 void efaSendRecv(EFAEndpoint& efa,
                  TransTask& task,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
-                 std::atomic<size_t>* cntr) {
-  size_t slice_threshold = 512 * 1024;  // 512KB
+                 std::atomic<size_t>* cntr,
+                 size_t slice_threshold) {
+
   uint64_t task_seq = 0;
 
   // process send/recv tasks
@@ -390,7 +392,7 @@ void efaSendRecv(EFAEndpoint& efa,
       char* _bufPtr = (char*)_ptr + j * slice_threshold;
       size_t taskSize = slice_threshold;
       if (j == n_subtasks - 1) {
-        int remainSize = _size - n_subtasks * slice_threshold;
+        long remainSize = _size - n_subtasks * slice_threshold;
         assert(remainSize >= 0);
         taskSize += remainSize;
       }

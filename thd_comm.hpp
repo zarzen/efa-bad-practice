@@ -58,7 +58,7 @@ class TransTask {
     ts = trans::time_now();
   };
 
-  TransTask():data(nullptr){};
+  TransTask() : data(nullptr){};
 
   TransTask(const TransTask& obj) {
     this->data = new char[obj.len];
@@ -97,22 +97,15 @@ class TransTask {
     return *this;
   }
 
-  ~TransTask() { 
-    if (data != nullptr){
+  ~TransTask() {
+    if (data != nullptr) {
       delete[] data;
     }
   }
 };
 
-void efaWorkerThdFun(std::string workerName,
-                     int rank,
-                     ThdSafeQueue<TransTask>* taskq,
-                     std::atomic<size_t>* cntr,
-                     char* efaAddrs,
-                     std::atomic<int>* addrReady);
 
 class ThdCommunicator {
-
   int listenPort;
 
   void init();
@@ -140,14 +133,12 @@ class ThdCommunicator {
   std::atomic<bool> exit{false};
   std::thread* sockThdPtr;
   std::thread* cntrThdPtr;
+  size_t slice_threshold{512 * 1024};  // default 512 KB
 
  public:
   const static int efaAddrSize{64};
 
-  ThdCommunicator(int listenPort,
-                  std::string dstIP,
-                  int dstPort,
-                  int nw);
+  ThdCommunicator(int listenPort, std::string dstIP, int dstPort, int nw);
 
   ThdCommunicator(int nw);
 
@@ -157,8 +148,8 @@ class ThdCommunicator {
   void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
   void sync();
 
-  std::string getName(){return this->name;}
-  size_t getCntr() {return this->cntr.load(std::memory_order_relaxed);}
+  std::string getName() { return this->name; }
+  size_t getCntr() { return this->cntr.load(std::memory_order_relaxed); }
   // will be invoked at the first time asend/arecv is called
   // it is a block function will retry several times
   // set ready = true;
@@ -167,6 +158,8 @@ class ThdCommunicator {
   void setListenPort(int port);
   int getListenPort();
   void setPeer(std::string ip, int port);
+  size_t getSliceSize() {return this->slice_threshold;}
+  void setSliceSize(size_t size) { this->slice_threshold = size; }
 
   // always listening for others to query
   static void socketListenerThdFun(ThdCommunicator* comm,
@@ -177,6 +170,13 @@ class ThdCommunicator {
   static void cntrMonitorThdFun(ThdCommunicator* comm);
 };
 
+void efaWorkerThdFun(std::string workerName,
+                     int rank,
+                     ThdSafeQueue<TransTask>* taskq,
+                     std::atomic<size_t>* cntr,
+                     char* efaAddrs,
+                     std::atomic<int>* addrReady,
+                     ThdCommunicator* comm);
 
 };  // namespace trans
 
