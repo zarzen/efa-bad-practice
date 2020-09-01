@@ -8,7 +8,7 @@ void ThdCommunicator::setPeer(std::string ip, int port) {
   this->dstPort = port;
 }
 
-int ThdCommunicator::getListenPort(){
+int ThdCommunicator::getListenPort() {
   while (this->listenPort == 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
@@ -32,7 +32,8 @@ void ThdCommunicator::init() {
   if (this->name == "") {
     randomName();
   }
-  spdlog::debug("name {}, dstIP {}, dstPort {}, listenPort {} ", this->name, this->dstIP, dstPort, listenPort);
+  spdlog::debug("name {}, dstIP {}, dstPort {}, listenPort {} ", this->name,
+                this->dstIP, dstPort, listenPort);
 
   efaAddrs = new char[nw * efaAddrSize];
   addrReadyC = new std::atomic<int>(0);
@@ -75,10 +76,7 @@ ThdCommunicator::ThdCommunicator(int listenPort,
                                  std::string dstIP,
                                  int dstPort,
                                  int nw)
-    : nw(nw),
-      listenPort(listenPort),
-      dstIP(dstIP),
-      dstPort(dstPort) {
+    : nw(nw), listenPort(listenPort), dstIP(dstIP), dstPort(dstPort) {
   this->name = "thd-comm-" + std::to_string(listenPort);
   this->init();
 };
@@ -182,11 +180,11 @@ void ThdCommunicator::cntrMonitorThdFun(ThdCommunicator* comm) {
   spdlog::info("cntrMonitorThdFun ended");
 };
 
-  void ThdCommunicator::sync() {
-    while (this->targetCntr != this->cntr) {
-      std::this_thread::sleep_for(std::chrono::microseconds(50));
-    }
+void ThdCommunicator::sync() {
+  while (this->targetCntr != this->cntr) {
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
   }
+}
 
 void ThdCommunicator::_sendTask(
     TaskType t,
@@ -304,14 +302,9 @@ void workerConvertMsg(trans::TransTask& msg,
                       std::vector<std::pair<void*, size_t>>& ptrs);
 
 void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
-  char name_buf[ThdCommunicator::efaAddrSize];
-  size_t len = 64;
-  char readable[64] = {0};
-  fi_av_lookup(efa.av, efa.peer_addr, name_buf, &len);
-  len = 64;
-  std::fill_n(readable, 64, 0);
-  fi_av_straddr(efa.av, name_buf, readable, &len);
-  spdlog::debug("{:s} verify peer addr {:s}", efa.nickname, readable);
+  char readable[64];
+  efa.printablePeerAddr(readable, 64);
+  spdlog::debug("{:s} verify peer addr {:s}", efa.getName(), readable);
 };
 
 void efaSendRecv(trans::EFAEndpoint& efa,
@@ -328,10 +321,9 @@ void efaWorkerThdFun(std::string workerName,
   trans::EFAEndpoint efa_ep(workerName + "-efa-ep");
   char* addrPtr = efaAddrs + rank * trans::ThdCommunicator::efaAddrSize;
   efa_ep.getAddr(addrPtr, trans::ThdCommunicator::efaAddrSize);
-  char readable[64];
-  size_t len = 64;
-  fi_av_straddr(efa_ep.av, addrPtr, readable, &len);
   (*addrReady) += 1;
+  char readable[64];
+  efa_ep.printableAddr(readable, 64);
   spdlog::debug("{:s} :: EFA address ready {:s}", workerName, readable);
 
   bool exit = false;
@@ -389,34 +381,32 @@ void workerConvertMsg(TransTask& msg,
   spdlog::debug("workerConvertMsg cost: {:f} s", trans::time_now() - start);
 }
 
-void fi_tsend_or_trecv(TaskType& mType,
-                       struct fid_ep* ep,
-                       char* bufPtr,
-                       size_t len,
-                       fi_addr_t dest_addr,
-                       uint64_t tag) {
-  if (mType == SEND_ONE || mType == SEND_BATCH) {
-    fi_tsend(ep, bufPtr, len, NULL, dest_addr, tag, NULL);
+void exeTask(EFAEndpoint& efa,
+             TransTask& task,
+             void* buf,
+             size_t& len,
+             uint64_t& tag) {
+  if (task.t == SEND_ONE || task.t == SEND_BATCH) {
+    efa.isend(buf, len, tag);
   } else {
-    fi_trecv(ep, bufPtr, len, NULL, dest_addr, tag, 0, NULL);
+    efa.irecv(buf, len, tag);
   }
 }
 
-void efaSendRecv(trans::EFAEndpoint& efa,
-                 TransTask& msg,
+void syncTask(EFAEndpoint& efa, TransTask& task) {
+  if (task.t == SEND_ONE || task.t == SEND_BATCH) {
+    efa.syncSend();
+  } else {
+    efa.syncRecv();
+  }
+}
+
+void efaSendRecv(EFAEndpoint& efa,
+                 TransTask& task,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
                  std::atomic<size_t>* cntr) {
-  //
-  size_t slice_threshold = 512 * 1024;  // 1MB
-  int task_seq = 0;
-  // std::vector<int> waitSizes;
-  // get task specific cq
-  fid_cq* cq;
-  if (msg.t == SEND_ONE || msg.t == SEND_BATCH) {
-    cq = efa.txcq;
-  } else {
-    cq = efa.rxcq;
-  }
+  size_t slice_threshold = 512 * 1024;  // 512KB
+  uint64_t task_seq = 0;
 
   // process send/recv tasks
   for (int i = 0; i < dataLoc.size(); i++) {
@@ -424,34 +414,24 @@ void efaSendRecv(trans::EFAEndpoint& efa,
     // for each batch
     void* _ptr = dataLoc[i].first;
     size_t _size = dataLoc[i].second;
-
     int n_subtasks = _size / slice_threshold;
     size_t processed = 0;
+
     for (int j = 0; j < n_subtasks; j++) {
       char* _bufPtr = (char*)_ptr + j * slice_threshold;
-      fi_tsend_or_trecv(msg.t, efa.ep, _bufPtr, slice_threshold, efa.peer_addr,
-                        task_seq);
+      size_t taskSize = slice_threshold;
+      if (j == n_subtasks - 1) {
+        int remainSize = _size - n_subtasks * slice_threshold;
+        assert(remainSize >= 0);
+        taskSize += remainSize;
+      }
+      exeTask(efa, task, _bufPtr, taskSize, task_seq);
       task_seq++;
     }
-    size_t remainSize = _size - n_subtasks * slice_threshold;
-    if (remainSize > 0) {
-      n_subtasks += 1;
-      char* _bufPtr = (char*)_ptr + (n_subtasks - 1) * slice_threshold;
-      fi_tsend_or_trecv(msg.t, efa.ep, _bufPtr, remainSize, efa.peer_addr,
-                        task_seq);
-      task_seq++;
-    } else if (remainSize < 0) {
-      spdlog::error("!!!not possible to have remain size lower than 0");
-    }
-    // later if we use different strategy to wait
-    // waitSizes.push_back(n_subtasks);
-
-    // wait for each data block transmission
-    spdlog::debug("{:s} :: waiting for {:d} sub-tasks of data block {:d}",
-                  efa.nickname, n_subtasks, i);
-    workerWaitCq(efa.nickname, cq, n_subtasks);
+    syncTask(efa, task);
+    // workerWaitCq(efa.nickname, cq, n_subtasks);
     (*cntr)++;  // increase worker counter
-    spdlog::debug("{:s} :: data block {:d} cost {:f} s", efa.nickname, i,
+    spdlog::debug("{:s} :: data block {:d} cost {:f} s", efa.getName(), i,
                   trans::time_now() - _ts);
   }
 }

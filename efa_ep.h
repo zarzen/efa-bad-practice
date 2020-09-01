@@ -22,11 +22,11 @@ namespace trans {
   } while (0)
 
 class EFAEndpoint {
+  char addr[64];
   std::atomic_size_t sendCntr{0};
   std::atomic_size_t recvCntr{0};
   int waitCQ(fid_cq* cq, int count);
 
- public:
   std::string nickname;
   bool selfReady = false;
   bool peerReady = false;
@@ -41,13 +41,15 @@ class EFAEndpoint {
   struct fid_cq* rxcq;
   fi_addr_t peer_addr;
 
-  size_t max_size = 64;
-
+ public:
+  const static int addrSize{64};
   EFAEndpoint(std::string nickname);
 
   int initialize();
 
   void getAddr(char* name_buf, int size);
+  void printableAddr(char* buf, int size);
+  void printablePeerAddr(char* buf, int size);
 
   void insertPeerAddr(char* addr);
 
@@ -58,6 +60,8 @@ class EFAEndpoint {
   int recv(void* buf, size_t len, uint64_t tag);
   int irecv(void* buf, size_t len, uint64_t tag);
   int syncRecv();
+
+  std::string getName() { return this->nickname; }
 
   ~EFAEndpoint();
 };

@@ -22,6 +22,26 @@ EFAEndpoint::EFAEndpoint(std::string nickname) : fi(nullptr) {
   initialize();
 };
 
+void EFAEndpoint::printableAddr(char* buf, int size) {
+  if (size < addrSize) {
+    throw "require larger buffer for";
+  }
+  size_t len = size;
+  fi_av_straddr(this->av, this->addr, buf, &len);
+}
+
+void EFAEndpoint::printablePeerAddr(char* buf, int size) {
+  if (size != this->addrSize) {
+    throw "size not match";
+  }
+  char addrBuf[this->addrSize];
+  size_t len = 64;
+  fi_av_lookup(this->av, this->peer_addr, addrBuf, &len);
+  len = 64;
+  std::fill_n(buf, size, '\0');
+  fi_av_straddr(this->av, addrBuf, buf, &len);
+}
+
 int EFAEndpoint::initialize() {
   struct fi_cq_attr txcq_attr, rxcq_attr;
   struct fi_av_attr av_attr;
@@ -91,15 +111,20 @@ int EFAEndpoint::initialize() {
   err = fi_enable(ep);
   ERR_CHK(err < 0, "fi_enable err {} ", err);
 
+  // get self addr
+  size_t len = 64;
+  err = fi_getname((fid_t)ep, this->addr, &len);
+  ERR_CHK(err < 0, "fi_getname err {} ", err);
+
   selfReady = true;
   return err;
 };
 
 void EFAEndpoint::getAddr(char* name_buf, int size) {
-  int err = 0;
-  size_t len = size;
-  err = fi_getname((fid_t)ep, name_buf, &len);
-  ERR_CHK(err < 0, "fi_getname err {} ", err);
+  if (size != this->addrSize) {
+    throw "wrong size";
+  }
+  memcpy(name_buf, this->addr, size);
 };
 
 void EFAEndpoint::insertPeerAddr(char* addr) {
@@ -133,7 +158,7 @@ int EFAEndpoint::send(const void* buf, size_t len, uint64_t tag) {
 };
 
 int EFAEndpoint::isend(const void* buf, size_t len, uint64_t tag) {
-  ERR_CHK(selfReady && peerReady, "isend error, selfReady {}, peerReady {}",
+  ERR_CHK(!(selfReady && peerReady), "isend error, selfReady {}, peerReady {}",
           selfReady, peerReady);
   this->sendCntr++;
   return fi_tsend(this->ep, buf, len, NULL, this->peer_addr, tag, NULL);
@@ -151,7 +176,7 @@ int EFAEndpoint::recv(void* buf, size_t len, uint64_t tag) {
 }
 
 int EFAEndpoint::irecv(void* buf, size_t len, uint64_t tag) {
-  ERR_CHK(selfReady && peerReady, "irecv error, selfReady {}, peerReady {}",
+  ERR_CHK(!(selfReady && peerReady), "irecv error, selfReady {}, peerReady {}",
           selfReady, peerReady);
   this->recvCntr++;
   return fi_trecv(this->ep, buf, len, NULL, this->peer_addr, tag, 0, NULL);
