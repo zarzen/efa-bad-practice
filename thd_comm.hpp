@@ -123,8 +123,7 @@ class ThdCommunicator {
   void _sendTask(TaskType t, std::vector<std::pair<char*, size_t>>& dataLoc);
 
 
- public:
-  const static int efaAddrSize{64};
+
   // for workers
   std::vector<std::thread> workerThds;
   std::vector<ThdSafeQueue<TransTask>*> workerTaskQs;
@@ -146,6 +145,9 @@ class ThdCommunicator {
   std::thread* sockThdPtr;
   std::thread* cntrThdPtr;
 
+ public:
+  const static int efaAddrSize{64};
+
   ThdCommunicator(int listenPort,
                   std::string dstIP,
                   int dstPort,
@@ -158,7 +160,8 @@ class ThdCommunicator {
   void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
   void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
 
-
+  std::string getName(){return this->name;}
+  size_t getCntr() {return this->cntr.load(std::memory_order_relaxed);}
   // will be invoked at the first time asend/arecv is called
   // it is a block function will retry several times
   // set ready = true;

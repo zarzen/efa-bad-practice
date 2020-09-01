@@ -46,10 +46,10 @@ void _client(std::string& dstIP) {
 
   for (int i = 0; i < repeatN; i++) {
     double ts = trans::time_now();
-    size_t curC = comm.cntr;
+    size_t curC = comm.getCntr();
     size_t target = curC + recvLoc.size();
     comm.arecvBatch(recvLoc);
-    while (comm.cntr != target) {
+    while (comm.getCntr() != target) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     double dur = trans::time_now() - ts;
@@ -94,10 +94,10 @@ void _server(std::string targetIP) {
 
   for (int i = 0; i < repeatN; i++) {
     double ts = trans::time_now();
-    size_t curC = comm.cntr;
+    size_t curC = comm.getCntr();
     size_t target = curC + paramLoc.size();
     comm.asendBatch(paramLoc);
-    while (comm.cntr != target) {
+    while (comm.getCntr() != target) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     double dur = trans::time_now() - ts;

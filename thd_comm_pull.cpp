@@ -18,11 +18,11 @@ void cliRecvThd(std::string efaPort, trans::ThdCommunicator* comm, char* recvBuf
   }
   while (true) {
     double startTime = trans::time_now();
-    size_t target_cntr = comm->cntr + recvTo.size();
+    size_t target_cntr = comm->getCntr() + recvTo.size();
     comm->arecvBatch(recvTo);
 
     // wait for completion
-    while (comm->cntr != target_cntr) {
+    while (comm->getCntr() != target_cntr) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     // compute bw and output
@@ -67,7 +67,7 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
     serverCntr ++;
   }
 
-  for (int i = 0; i < recvThds.size(); i++) {
+  for (size_t i = 0; i < recvThds.size(); i++) {
     recvThds[i].join();
   }
 
@@ -90,17 +90,17 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, char* memBuff, size_t offset) 
 
   std::vector<std::pair<char*, size_t>> sendFrom;
   for (int i = 0; i < nBlock; i++) {
-    char* dataBuff = memBuff + i * blockSize;
+    char* dataBuff = memBuff + offset + i * blockSize;
     sendFrom.push_back(std::make_pair(dataBuff, blockSize));
   }
 
   // repeatly sending
   while (true) {
     double startTime = trans::time_now();
-    size_t target_cntr = comm.cntr + sendFrom.size();
+    size_t target_cntr = comm.getCntr() + sendFrom.size();
     comm.asendBatch(sendFrom);
 
-    while (comm.cntr != target_cntr) {
+    while (comm.getCntr() != target_cntr) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     // compute bw and output
