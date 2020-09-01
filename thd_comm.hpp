@@ -13,7 +13,7 @@
 
 namespace trans {
 
-enum MsgType {
+enum TaskType {
   INS_EFA_ADDR_INFO,
   SEND_ONE,
   SEND_BATCH,
@@ -22,7 +22,7 @@ enum MsgType {
   SHUTDOWN
 };
 
-inline std::string MsgTyepStr(MsgType& t) {
+inline std::string type2str(TaskType& t) {
   switch (t) {
     case INS_EFA_ADDR_INFO:
       return "INS_EFA_ADDR_INFO";
@@ -37,28 +37,28 @@ inline std::string MsgTyepStr(MsgType& t) {
     case SHUTDOWN:
       return "SHUTDOWN";
     default:
-      spdlog::error("MsgTyepStr::error:: Unknow type");
+      spdlog::error("type2str::error:: Unknow type");
       return "";
   }
 };
 
-class TransMsg {
+class TransTask {
  public:
-  MsgType t;
+  TaskType t;
   char* data;
   size_t len;
   double ts;
 
-  TransMsg(MsgType _t, size_t data_len) {
+  TransTask(TaskType _t, size_t data_len) {
     t = _t;
     data = new char[data_len];
     len = data_len;
     ts = trans::time_now();
   };
 
-  TransMsg():data(nullptr){};
+  TransTask():data(nullptr){};
 
-  TransMsg(const TransMsg& obj) {
+  TransTask(const TransTask& obj) {
     this->data = new char[obj.len];
     this->len = obj.len;
     this->t = obj.t;
@@ -67,7 +67,7 @@ class TransMsg {
   }
 
   // move constructor
-  TransMsg(TransMsg&& obj) {
+  TransTask(TransTask&& obj) {
     t = obj.t;
     data = obj.data;
     len = obj.len;
@@ -76,7 +76,7 @@ class TransMsg {
   };
 
   // move assignment operator
-  TransMsg& operator=(TransMsg&& other) {
+  TransTask& operator=(TransTask&& other) {
     if (this != &other) {
       // Free the existing resource.
       delete[] data;
@@ -95,7 +95,7 @@ class TransMsg {
     return *this;
   }
 
-  ~TransMsg() { 
+  ~TransTask() { 
     if (data != nullptr){
       delete[] data;
     }
@@ -104,7 +104,7 @@ class TransMsg {
 
 void efaWorkerThdFun(std::string workerName,
                      int rank,
-                     ThdSafeQueue<TransMsg>* taskq,
+                     ThdSafeQueue<TransTask>* taskq,
                      std::atomic<size_t>* cntr,
                      char* efaAddrs,
                      std::atomic<int>* addrReady);
@@ -114,11 +114,11 @@ class ThdCommunicator {
   const static int efaAddrSize{64};
   // for workers
   std::vector<std::thread> workerThds;
-  std::vector<ThdSafeQueue<TransMsg>*> workerTaskQs;
+  std::vector<ThdSafeQueue<TransTask>*> workerTaskQs;
   std::vector<std::atomic<size_t>*> workerCntrs;
   std::atomic<int>* addrReadyC;
   // potential usage for worker to report msg to communicator
-  // std::vector<ThdSafeQueue<TransMsg>*> workerMsgQs;
+  // std::vector<ThdSafeQueue<TransTask>*> workerMsgQs;
 
   // communicator vars
   std::string name;
@@ -142,7 +142,7 @@ class ThdCommunicator {
   void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
   void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
 
-  void _sendTask(MsgType t, std::vector<std::pair<char*, size_t>>& dataLoc);
+  void _sendTask(TaskType t, std::vector<std::pair<char*, size_t>>& dataLoc);
 
   // will be invoked at the first time asend/arecv is called
   // it is a block function will retry several times

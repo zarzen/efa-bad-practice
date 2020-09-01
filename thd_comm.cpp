@@ -17,7 +17,7 @@ ThdCommunicator::ThdCommunicator(std::string listenPort,
   // start workers
   for (int i = 0; i < nw; i++) {
     std::string _wn = this->name + "-worker-" + std::to_string(i);
-    ThdSafeQueue<TransMsg>* _wtq = new ThdSafeQueue<TransMsg>();
+    ThdSafeQueue<TransTask>* _wtq = new ThdSafeQueue<TransTask>();
     std::atomic<size_t>* _wc = new std::atomic<size_t>();
     std::thread _wt(efaWorkerThdFun, _wn, i, _wtq, _wc, efaAddrs, addrReadyC);
     workerThds.push_back(std::move(_wt));
@@ -60,7 +60,7 @@ ThdCommunicator::~ThdCommunicator() {
 
   // 2: ======= wait for workers to complete
   for (int i = 0; i < nw; i++) {
-    TransMsg _stop_msg(SHUTDOWN, 1);
+    TransTask _stop_msg(SHUTDOWN, 1);
     workerTaskQs[i]->push(std::move(_stop_msg));
     workerThds[i].join();
   }
@@ -125,13 +125,13 @@ void ThdCommunicator::cntrMonitorThdFun(ThdCommunicator* comm) {
 };
 
 void ThdCommunicator::_sendTask(
-    MsgType t,
+    TaskType t,
     std::vector<std::pair<char*, size_t>>& dataLoc) {
   for (int wi = 0; wi < this->nw; wi++) {
-    TransMsg msg(t, 4 + dataLoc.size() * 16);
+    TransTask msg(t, 4 + dataLoc.size() * 16);
     // fill msg content
     *(int*)msg.data = dataLoc.size();
-    spdlog::debug("assemble TransMsg of worker {:d}", wi);
+    spdlog::debug("assemble TransTask of worker {:d}", wi);
     for (int j = 0; j < dataLoc.size(); j++) {
       char* _ptr = dataLoc[j].first;
       size_t _size = dataLoc[j].second;
@@ -146,7 +146,7 @@ void ThdCommunicator::_sendTask(
       *(size_t*)(msg.data + 4 + j * 16 + 8) = _worker_size;
     }
     workerTaskQs[wi]->push(std::move(msg));
-    spdlog::debug("TransMsg enqueued of worker {:d}", wi);
+    spdlog::debug("TransTask enqueued of worker {:d}", wi);
   }
 }
 
@@ -177,7 +177,7 @@ bool ThdCommunicator::getPeerAddrs() {
     sCli._recv(peerAddrs, nw * efaAddrSize);
     for (int wi = 0; wi < nw; wi++) {
       char* _addr = peerAddrs + wi * efaAddrSize;
-      TransMsg m(INS_EFA_ADDR_INFO, efaAddrSize);
+      TransTask m(INS_EFA_ADDR_INFO, efaAddrSize);
       memcpy(m.data, _addr, efaAddrSize);
       workerTaskQs[wi]->push(std::move(m));
       spdlog::debug("INS_EFA_ADDR_INFO enqueued into task q of worker {:d}",
@@ -230,7 +230,7 @@ void workerWaitCq(std::string& caller, fid_cq* cq, int count) {
   }
 };
 
-void workerConvertMsg(trans::TransMsg& msg,
+void workerConvertMsg(trans::TransTask& msg,
                       std::vector<std::pair<void*, size_t>>& ptrs);
 
 void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
@@ -245,13 +245,13 @@ void verifyEFAPeerAddr(trans::EFAEndpoint& efa) {
 };
 
 void efaSendRecv(trans::EFAEndpoint& efa,
-                 trans::TransMsg& msg,
+                 trans::TransTask& msg,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
                  std::atomic<size_t>* cntr);
 
 void efaWorkerThdFun(std::string workerName,
                      int rank,
-                     ThdSafeQueue<TransMsg>* taskq,
+                     ThdSafeQueue<TransTask>* taskq,
                      std::atomic<size_t>* cntr,
                      char* efaAddrs,
                      std::atomic<int>* addrReady) {
@@ -267,9 +267,9 @@ void efaWorkerThdFun(std::string workerName,
   bool exit = false;
   spdlog::debug("{:s} :: Event process loop start", workerName);
   while (!exit) {
-    TransMsg _msg;
+    TransTask _msg;
     taskq->pop(&_msg);
-    std::string _tstr = MsgTyepStr(_msg.t);
+    std::string _tstr = type2str(_msg.t);
     spdlog::debug("{:s} got task {:s} delayed {:f} s", workerName,
                   _tstr, trans::time_now() - _msg.ts);
 
@@ -304,7 +304,7 @@ void efaWorkerThdFun(std::string workerName,
   spdlog::debug("{:s} :: Exit event loop", workerName);
 };
 
-void workerConvertMsg(TransMsg& msg,
+void workerConvertMsg(TransTask& msg,
                       std::vector<std::pair<void*, size_t>>& ptrs) {
   double start = trans::time_now();
   // first 4 bytes
@@ -321,7 +321,7 @@ void workerConvertMsg(TransMsg& msg,
   spdlog::debug("workerConvertMsg cost: {:f} s", trans::time_now() - start);
 }
 
-void fi_tsend_or_trecv(MsgType& mType,
+void fi_tsend_or_trecv(TaskType& mType,
                        struct fid_ep* ep,
                        char* bufPtr,
                        size_t len,
@@ -335,7 +335,7 @@ void fi_tsend_or_trecv(MsgType& mType,
 }
 
 void efaSendRecv(trans::EFAEndpoint& efa,
-                 TransMsg& msg,
+                 TransTask& msg,
                  std::vector<std::pair<void*, size_t>>& dataLoc,
                  std::atomic<size_t>* cntr) {
   //
