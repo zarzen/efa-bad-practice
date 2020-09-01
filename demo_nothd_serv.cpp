@@ -53,7 +53,7 @@ void serv_efa_address_exchange(std::string ip, std::string port, trans::EFAEndpo
   size_t addr_size = 64;
   // launch socket client
   SockServ serv(port);
-  serv._listen();
+  serv.acceptCli();
 
   // exchange EFA address with socket server
   char local_ep_addrs[64] = {0};

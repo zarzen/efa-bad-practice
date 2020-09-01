@@ -1,7 +1,7 @@
 #include <fstream>
 #include <thread>
 #include <sys/mman.h>
-#include "sock_cli_serv.h"
+#include "helper_socket.h"
 #include "thd_comm.hpp"
 
 int repeatN = 10;
@@ -85,7 +85,7 @@ void _server(std::string targetIP) {
   spdlog::info("data and buffer preparement DONE");
 
   trans::SockServ sServ(sockPort);
-  sServ._listen();
+  sServ.acceptCli();
   char syncBuf[4];
   sServ._recv(syncBuf, 4);
   std::string sync("sync");

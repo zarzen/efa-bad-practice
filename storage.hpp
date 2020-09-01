@@ -409,7 +409,7 @@ void sockServThd(ParamStore* store, std::string port) {
   trans::SockServ serv(port);
   std::vector<std::thread> handles;
   while (true && !store->_exit) {
-    int sockfd = serv._listen();  // get new connection
+    int sockfd = serv.acceptCli();  // get new connection
     std::thread _t(cliConnHandlerThd, store, sockfd);
     _t.detach();
     handles.push_back(std::move(_t));

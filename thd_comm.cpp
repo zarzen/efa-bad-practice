@@ -92,7 +92,7 @@ void ThdCommunicator::socketListenerThdFun(ThdCommunicator* comm,
     // quick hack to stop this thread:
     // set the comm->exit = true;
     // then connect to this sock and recv
-    int cli_fd = serv._listen();  // here will block;
+    int cli_fd = serv.acceptCli();  // here will block;
     spdlog::debug("socketListenerThdFun got a connection sock fd: {:d}", cli_fd);
     size_t ret = send(cli_fd, addrsBuf, addrsLen, 0);
     if (ret == -1) {

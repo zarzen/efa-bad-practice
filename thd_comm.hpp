@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 #include "efa_ep.h"
-#include "sock_cli_serv.h"
+#include "helper_socket.h"
 #include "spdlog/spdlog.h"
 #include "util.h"
 
