@@ -66,8 +66,8 @@ if(NOT TARGET spdlog)
     find_package(spdlog REQUIRED)
 endif()
 
-add_executable(thd_ctest thd_ctest.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp thd_comm.hpp)
+add_executable(thd_ctest thd_ctest.cpp util.cpp sock_cli_serv.cpp efa_ep.cpp thd_comm.cpp)
 target_link_libraries(thd_ctest ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdlog)
 
-add_executable(thd_comm_pull thd_comm_pull.cpp tcp.cpp efa_ep.cpp thd_comm.hpp sock_cli_serv.cpp util.cpp)
+add_executable(thd_comm_pull thd_comm_pull.cpp tcp.cpp efa_ep.cpp thd_comm.cpp sock_cli_serv.cpp util.cpp)
 target_link_libraries(thd_comm_pull ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdlog)
