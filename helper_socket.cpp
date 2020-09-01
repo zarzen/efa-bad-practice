@@ -4,7 +4,7 @@
 
 namespace trans {
 
-SockCli::SockCli(std::string ip, std::string port) {
+SockCli::SockCli(std::string ip, int port) {
   struct sockaddr_in serv_addr;
   if ((client_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     printf("\n Socket creation error \n");
@@ -19,7 +19,7 @@ SockCli::SockCli(std::string ip, std::string port) {
 
   // set up server addr
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(std::stoi(port));
+  serv_addr.sin_port = htons(port);
   // Convert IPv4 and IPv6 addresses from text to binary form
   if (inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr) <= 0) {
     printf("\nInvalid address/ Address not supported \n");
@@ -46,7 +46,7 @@ int SockCli::_recv(char* buf, int len) {
   return read(client_sock, buf, len);
 };
 
-void SockServ::initSocket(std::string& port) {
+void SockServ::initSocket(int port) {
   int opt = 1;
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
     perror("socket failed");
@@ -64,7 +64,7 @@ void SockServ::initSocket(std::string& port) {
   }
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = INADDR_ANY;
-  serv_addr.sin_port = htons(std::stoi(port));
+  serv_addr.sin_port = htons(port);
 
   // bind to port
   if (bind(server_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
@@ -78,21 +78,21 @@ void SockServ::initSocket(std::string& port) {
   }
 }
 
-SockServ::SockServ(std::string port) {
+SockServ::SockServ(int port) {
   this->initSocket(port);
 };
 
 SockServ::SockServ() {
-  std::string fakePort = "0";
-  this->initSocket(fakePort);
+
+  this->initSocket(0);
 }
 
-std::string SockServ::getListenPort() {
+int SockServ::getListenPort() {
   struct sockaddr_in sin;
   socklen_t len = sizeof(sin);
   if (getsockname(server_fd, (struct sockaddr *)&sin, &len) == -1)
       perror("getsockname");
-  return std::to_string(ntohs(sin.sin_port));
+  return ntohs(sin.sin_port);
 }
 
 int SockServ::acceptCli() {

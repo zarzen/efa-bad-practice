@@ -1,8 +1,21 @@
 #include "thd_comm.hpp"
+#include <stdlib.h>
 
 namespace trans {
 
-void ThdCommunicator::setListenPort(std::string port) {
+void ThdCommunicator::setPeer(std::string ip, int port) {
+  this->dstIP = ip;
+  this->dstPort = port;
+}
+
+int ThdCommunicator::getListenPort(){
+  while (this->listenPort == 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  return this->listenPort;
+}
+
+void ThdCommunicator::setListenPort(int port) {
   this->listenPort = port;
 }
 
@@ -19,6 +32,7 @@ void ThdCommunicator::init() {
   if (this->name == "") {
     randomName();
   }
+  spdlog::debug("name {}, dstIP {}, dstPort {}, listenPort {} ", this->name, this->dstIP, dstPort, listenPort);
 
   efaAddrs = new char[nw * efaAddrSize];
   addrReadyC = new std::atomic<int>(0);
@@ -57,20 +71,20 @@ void ThdCommunicator::waitLocalAddrs() {
   }
 }
 
-ThdCommunicator::ThdCommunicator(std::string listenPort,
+ThdCommunicator::ThdCommunicator(int listenPort,
                                  std::string dstIP,
-                                 std::string dstPort,
+                                 int dstPort,
                                  int nw)
     : nw(nw),
       listenPort(listenPort),
       dstIP(dstIP),
-      dstPort(dstPort),
-      name("thd-comm-" + listenPort) {
+      dstPort(dstPort) {
+  this->name = "thd-comm-" + std::to_string(listenPort);
   this->init();
 };
 
 ThdCommunicator::ThdCommunicator(int nw)
-    : nw(nw), listenPort(listenPort), dstIP(""), dstPort(""), name("") {
+    : nw(nw), listenPort(0), dstIP(""), dstPort(0), name("") {
   this->init();
 }
 
@@ -117,11 +131,11 @@ ThdCommunicator::~ThdCommunicator() {
 
 // only used for
 void ThdCommunicator::socketListenerThdFun(ThdCommunicator* comm,
-                                           std::string port,
+                                           int port,
                                            char* addrsBuf,
                                            size_t addrsLen) {
   trans::SockServ* serv;
-  if (port != "") {
+  if (port != 0) {
     serv = new trans::SockServ(port);
   } else {
     serv = new trans::SockServ();
@@ -214,9 +228,9 @@ void ThdCommunicator::arecvBatch(
 
 bool ThdCommunicator::getPeerAddrs() {
   spdlog::debug("enter ThdCommunicator::getPeerAddrs");
-  if (this->dstIP == "" || this->dstPort == "") {
+  if (this->dstIP == "" || this->dstPort == 0) {
     spdlog::error("Did not set peer IP and Port, unable to get peer EFA addrs");
-    return false;
+    throw "Did not set peer IP and Port, unable to get peer EFA addrs";
   }
   try {
     trans::SockCli sCli(dstIP, dstPort);

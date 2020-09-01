@@ -16,11 +16,11 @@ bool verifyData(char* d1, char* d2, size_t len);
 
 void _client(std::string& dstIP) {
   std::string commDstIP(dstIP);
-  std::string commDstPort("8111");
-  std::string commEFAPort("8222");
+  int commDstPort = 8111 ;
+  int commEFAPort = 8222;
 
   std::string sockDstIP(dstIP);
-  std::string sockDstPort("8333");
+  int sockDstPort=8333;
 
   int nw = 4;
   trans::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);
@@ -69,9 +69,9 @@ void _client(std::string& dstIP) {
 
 void _server(std::string targetIP) {
   std::string commDstIP(targetIP);
-  std::string commDstPort("8222");
-  std::string commEFAPort("8111");
-  std::string sockPort("8333");
+  int commDstPort = 8222;
+  int commEFAPort = 8111;
+  int sockPort = 8333;
 
   int nw = 4;
   trans::ThdCommunicator comm(commEFAPort, commDstIP, commDstPort, nw);

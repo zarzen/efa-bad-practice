@@ -12,23 +12,23 @@ class SockCli {
   int client_sock;
 
   SockCli();
-  SockCli(std::string ip, std::string port);
+  SockCli(std::string ip, int port);
   SockCli(const SockCli& s);
   int _send(const char* buf, int len);
   int _recv(char* buf, int len);
 };
 
 class SockServ {
-  void initSocket(std::string& port);
+  void initSocket(int port);
   int server_fd = 0;
   struct sockaddr_in serv_addr;
   int new_cli;
 
  public:
-  SockServ(std::string port);
+  SockServ(int port);
   SockServ();
 
-  std::string getListenPort();
+  int getListenPort();
   int acceptCli();
 
   int _send(const char* buf, int len);

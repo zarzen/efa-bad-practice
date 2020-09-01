@@ -39,15 +39,15 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
   char* recvBuff = new char[10 * 1024 * 1024 * 1024UL];
   // mlock(recvBuff, 10 * 1024 * 1024 * 1024UL);
   size_t chunkSize = 500 * 1024 * 1024UL;
-  int startPort = 20000;
 
   std::vector<TcpClient> sockToServ;
   std::vector<std::thread> recvThds;
   std::vector<trans::ThdCommunicator*> comms;
   int serverCntr = 0;
   for (auto sp : servers) {
-    
-    int EFAListen = startPort ++;
+
+    trans::ThdCommunicator* _c = new trans::ThdCommunicator(nw);
+    int EFAListen = _c->getListenPort();
     TcpClient toServer(sp.first, sp.second);
     spdlog::debug("sending local EFA listen port {:d}", EFAListen);
     toServer.tcpSend((char*)&EFAListen, sizeof(int));
@@ -57,10 +57,9 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
     spdlog::debug("received dst EFA port {:d}", dstEFAPort);
 
     char* memPtr = recvBuff + serverCntr * chunkSize;
-    trans::ThdCommunicator* _c = new trans::ThdCommunicator(std::to_string(EFAListen), 
-                                                                sp.first, 
-                                                                std::to_string(dstEFAPort),
-                                                                nw);
+    
+    _c->setPeer(sp.first, dstEFAPort);
+
     std::thread recv(cliRecvThd, std::to_string(EFAListen), _c, memPtr);
     recvThds.push_back(std::move(recv));
     comms.push_back(_c);
@@ -74,8 +73,10 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers){
 
 }
 
-void serverSendThd(std::shared_ptr<TcpAgent> cli, int EFAListen, char* memBuff, size_t offset) {
-  
+void serverSendThd(std::shared_ptr<TcpAgent> cli, char* memBuff, size_t offset) {
+  trans::ThdCommunicator comm(nw);
+  int EFAListen = comm.getListenPort();
+
   char buf[4] = {'\0'};
   // exchange port for EFA address fetch
   cli->tcpRecv(buf, sizeof(int));
@@ -85,7 +86,7 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, int EFAListen, char* memBuff, 
 
   std::string dstIP = cli->getIP();
   spdlog::info("client ip addr {:s}", dstIP);
-  trans::ThdCommunicator comm(std::to_string(EFAListen), dstIP, std::to_string(dstPort), nw);
+  comm.setPeer(dstIP, dstPort);
 
   std::vector<std::pair<char*, size_t>> sendFrom;
   for (int i = 0; i < nBlock; i++) {
@@ -114,7 +115,6 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, int EFAListen, char* memBuff, 
 
 void runAsServer(int sockPort) {
   int listenPort = sockPort;
-  int EFAListenPort = 10000;
   char* memBuff = new char[10 * 1024UL * 1024UL * 1024UL];
   // mlock(memBuff, 10 * 1024UL * 1024UL * 1024UL);
   size_t offset = 0;
@@ -126,10 +126,9 @@ void runAsServer(int sockPort) {
   while (true) {
     std::shared_ptr<TcpAgent> cli = server.tcpAccept();
     spdlog::info("accepted one client");
-    std::thread handleThd(serverSendThd, cli, EFAListenPort, memBuff, offset);
+    std::thread handleThd(serverSendThd, cli, memBuff, offset);
     cliThds.push_back(std::move(handleThd));
 
-    EFAListenPort++;
     offset += step;
   }
 }

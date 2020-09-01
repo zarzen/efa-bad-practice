@@ -113,12 +113,15 @@ void efaWorkerThdFun(std::string workerName,
 
 class ThdCommunicator {
 
-  std::string listenPort;
+  int listenPort;
 
   void init();
   void startEFAWorkers(int nw);
   void randomName();
   void waitLocalAddrs();
+
+  void _sendTask(TaskType t, std::vector<std::pair<char*, size_t>>& dataLoc);
+
 
  public:
   const static int efaAddrSize{64};
@@ -135,7 +138,7 @@ class ThdCommunicator {
   int nw;
 
   std::string dstIP;
-  std::string dstPort;
+  int dstPort;
   bool peerAddrReady{false};  // peer EFA addrs is not ready at first
   char* efaAddrs;
   std::atomic<size_t> cntr{0};
@@ -143,9 +146,9 @@ class ThdCommunicator {
   std::thread* sockThdPtr;
   std::thread* cntrThdPtr;
 
-  ThdCommunicator(std::string listenPort,
+  ThdCommunicator(int listenPort,
                   std::string dstIP,
-                  std::string dstPort,
+                  int dstPort,
                   int nw);
 
   ThdCommunicator(int nw);
@@ -155,19 +158,19 @@ class ThdCommunicator {
   void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
   void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
 
-  void _sendTask(TaskType t, std::vector<std::pair<char*, size_t>>& dataLoc);
 
   // will be invoked at the first time asend/arecv is called
   // it is a block function will retry several times
   // set ready = true;
   bool getPeerAddrs();
 
-  void setListenPort(std::string port);
-  void setPeer(std::string ip, std::string port);
+  void setListenPort(int port);
+  int getListenPort();
+  void setPeer(std::string ip, int port);
 
   // always listening for others to query
   static void socketListenerThdFun(ThdCommunicator* comm,
-                                   std::string port,
+                                   int port,
                                    char* addrsBuf,
                                    size_t addrsLen);
 
