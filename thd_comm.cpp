@@ -182,9 +182,18 @@ void ThdCommunicator::cntrMonitorThdFun(ThdCommunicator* comm) {
   spdlog::info("cntrMonitorThdFun ended");
 };
 
+  void ThdCommunicator::sync() {
+    while (this->targetCntr != this->cntr) {
+      std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
+  }
+
 void ThdCommunicator::_sendTask(
     TaskType t,
     std::vector<std::pair<char*, size_t>>& dataLoc) {
+  // increase target cntr
+  this->targetCntr += dataLoc.size();
+
   for (int wi = 0; wi < this->nw; wi++) {
     TransTask msg(t, 4 + dataLoc.size() * 16);
     // fill msg content

@@ -119,22 +119,18 @@ class ThdCommunicator {
   void startEFAWorkers(int nw);
   void randomName();
   void waitLocalAddrs();
-
   void _sendTask(TaskType t, std::vector<std::pair<char*, size_t>>& dataLoc);
-
-
 
   // for workers
   std::vector<std::thread> workerThds;
   std::vector<ThdSafeQueue<TransTask>*> workerTaskQs;
   std::vector<std::atomic<size_t>*> workerCntrs;
   std::atomic<int>* addrReadyC;
-  // potential usage for worker to report msg to communicator
-  // std::vector<ThdSafeQueue<TransTask>*> workerMsgQs;
 
   // communicator vars
   std::string name;
   int nw;
+  std::atomic<size_t> targetCntr{0};
 
   std::string dstIP;
   int dstPort;
@@ -159,6 +155,7 @@ class ThdCommunicator {
 
   void asendBatch(std::vector<std::pair<char*, size_t>> dataLoc);
   void arecvBatch(std::vector<std::pair<char*, size_t>> dataLoc);
+  void sync();
 
   std::string getName(){return this->name;}
   size_t getCntr() {return this->cntr.load(std::memory_order_relaxed);}

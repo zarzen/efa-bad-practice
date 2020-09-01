@@ -18,13 +18,9 @@ void cliRecvThd(std::string efaPort, trans::ThdCommunicator* comm, char* recvBuf
   }
   while (true) {
     double startTime = trans::time_now();
-    size_t target_cntr = comm->getCntr() + recvTo.size();
     comm->arecvBatch(recvTo);
+    comm->sync();
 
-    // wait for completion
-    while (comm->getCntr() != target_cntr) {
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
-    }
     // compute bw and output
     double dur = trans::time_now() - startTime;
 
@@ -97,12 +93,9 @@ void serverSendThd(std::shared_ptr<TcpAgent> cli, char* memBuff, size_t offset) 
   // repeatly sending
   while (true) {
     double startTime = trans::time_now();
-    size_t target_cntr = comm.getCntr() + sendFrom.size();
     comm.asendBatch(sendFrom);
 
-    while (comm.getCntr() != target_cntr) {
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
-    }
+    comm.sync();
     // compute bw and output
     double dur = trans::time_now() - startTime;
 
