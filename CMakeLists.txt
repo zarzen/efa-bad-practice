@@ -74,3 +74,10 @@ target_link_libraries(thd_comm_pull ${LIBFABRIC_LIBRARY} pthread rt spdlog::spdl
 
 add_executable(test_sockets test_socket.cpp helper_socket.cpp)
 target_link_libraries(test_sockets spdlog::spdlog)
+
+
+add_executable(shard_ctl shard_ctl.cpp tcp.cpp helper_socket.cpp)
+target_link_libraries(shard_ctl spdlog::spdlog pthread)
+
+add_executable(shard_server shard_serv.cpp helper_socket.cpp efa_ep.cpp thd_comm.cpp util.cpp tcp.cpp)
+target_link_libraries(shard_server spdlog::spdlog ${LIBFABRIC_LIBRARY} pthread)
