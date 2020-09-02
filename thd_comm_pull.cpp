@@ -5,46 +5,12 @@
 #include "thd_comm.hpp"
 
 int nw = 8;
-size_t blockSize = 32 * 1024 * 1024;
+size_t blockSize = 32 * 1024 * 1024 / 2;
 int nBlock = 8;
 
-void cliRecvThd(std::string efaPort,
-                trans::ThdCommunicator* comm,
-                char* recvBuff) {
-  // start receiving
-  std::vector<std::pair<char*, size_t>> recvTo;
-  for (int i = 0; i < nBlock; i++) {
-    char* dataBuff = recvBuff + i * blockSize;
-    recvTo.push_back(std::make_pair(dataBuff, blockSize));
-  }
-  while (true) {
-    double startTime = trans::time_now();
-    comm->arecvBatch(recvTo);
-    comm->sync();
-
-    // compute bw and output
-    double dur = trans::time_now() - startTime;
-
-    size_t totalSize = nBlock * blockSize;
-    double bw = ((totalSize * 8) / dur) / 1e9;
-    spdlog::info("client [{:s}] recv bw : {:f}, dur: {:f}s, total size {}",
-                 efaPort, bw, dur, totalSize);
-  }
-}
-
-void runAsCli(std::vector<std::pair<std::string, int>>& servers) {
-  if (const char* env_p = std::getenv("COMM_NW")) {
-    nw = std::stoi(env_p);
-    spdlog::info("setup comm-nw {}", nw);
-  }
-
-  char* recvBuff = new char[10 * 1024 * 1024 * 1024UL];
-  // mlock(recvBuff, 10 * 1024 * 1024 * 1024UL);
-  size_t chunkSize = 500 * 1024 * 1024UL;
-
-  std::vector<TcpClient> sockToServ;
-  std::vector<std::thread> recvThds;
-  std::vector<trans::ThdCommunicator*> comms;
+void initClis(std::vector<std::pair<std::string, int>>& servers,
+              std::vector<trans::ThdCommunicator*>& comms) {
+  
   int serverCntr = 0;
   for (auto sp : servers) {
     trans::ThdCommunicator* _c = new trans::ThdCommunicator(nw);
@@ -61,20 +27,49 @@ void runAsCli(std::vector<std::pair<std::string, int>>& servers) {
     toServer.tcpRecv(buff, sizeof(int));
     int dstEFAPort = *(int*)buff;
     spdlog::debug("received dst EFA port {:d}", dstEFAPort);
-
-    char* memPtr = recvBuff + serverCntr * chunkSize;
-
     _c->setPeer(sp.first, dstEFAPort);
-
-    std::thread recv(cliRecvThd, std::to_string(EFAListen), _c, memPtr);
-    recvThds.push_back(std::move(recv));
     comms.push_back(_c);
+  }
+}
 
-    serverCntr++;
+void runAsCli(std::vector<std::pair<std::string, int>>& servers) {
+  if (const char* env_p = std::getenv("COMM_NW")) {
+    nw = std::stoi(env_p);
+    spdlog::info("setup comm-nw {}", nw);
   }
 
-  for (size_t i = 0; i < recvThds.size(); i++) {
-    recvThds[i].join();
+  char* recvBuff = new char[10 * 1024 * 1024 * 1024UL];
+
+  // create communicators
+  std::vector<trans::ThdCommunicator*> comms;
+  initClis(servers, comms);
+
+  // start receiving
+  std::vector<std::vector<std::pair<char*, size_t>>> recvLocs;
+  for (size_t j = 0; j < comms.size(); j ++ ) {
+    std::vector<std::pair<char*, size_t>> recvTo;
+    for (int i = 0; i < nBlock; i++) {
+      char* dataBuff = recvBuff + (j * nBlock + i) * blockSize;
+      recvTo.push_back(std::make_pair(dataBuff, blockSize));
+    }
+    recvLocs.push_back(recvTo);
+  }
+  
+
+  while (true) {
+    double startTime = trans::time_now();
+    for (size_t i = 0; i < comms.size(); i++) {
+      comms[i]->arecvBatch(recvLocs[i]);
+    }
+    for (size_t i = 0; i < comms.size(); i++) {
+      comms[i]->sync();
+    }
+
+    double dur = trans::time_now() - startTime;
+    size_t totalSize = comms.size() * nBlock * blockSize;
+    double bw = ((totalSize * 8) / dur) / 1e9;
+    spdlog::info("client recv bw : {:f}, dur: {:f}s, total size {}",
+                bw, dur, totalSize);
   }
 }
 
