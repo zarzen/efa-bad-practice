@@ -1,9 +1,10 @@
-#include "tcp.h"
 #include "shard_util.hpp"
 #include "spdlog/spdlog.h"
+#include "tcp.h"
 #include "thd_comm.hpp"
 
-void initCommunicator(std::shared_ptr<TcpAgent> cli, trans::ThdCommunicator& comm) {
+void initCommunicator(std::shared_ptr<TcpAgent> cli,
+                      trans::ThdCommunicator& comm) {
   comm.setSliceSize(COMM_SLICE);
   int EFAListen = comm.getListenPort();
 
@@ -19,39 +20,33 @@ void initCommunicator(std::shared_ptr<TcpAgent> cli, trans::ThdCommunicator& com
   comm.setPeer(dstIP, dstPort);
 }
 
-void cliHandlerThd(std::shared_ptr<TcpAgent> fromCli, char* buf){
+void cliHandlerThd(std::shared_ptr<TcpAgent> fromCli, char* buf) {
   trans::ThdCommunicator comm(COMM_NW);
   initCommunicator(fromCli, comm);
 
   // main loop
   while (true) {
     // recv instruction
-    char buf[8]; // two ints
+    char buf[8];  // two ints
     fromCli->tcpRecv(buf, 8);
     int bidx = *(int*)buf;
-    int splitN = *(int*)(buf+4);
+    int splitN = *(int*)(buf + 4);
 
     std::vector<std::pair<char*, size_t>> sendFrom;
     if (bidx < 0) {
       // request full model
       size_t size = totalSize(MODEL_BATCHES, MODEL_BATCH_N);
-      if (splitN > 0) { // vertical split
+      if (splitN > 0) {  // vertical split
         size /= splitN;
       }
       sendFrom.push_back(std::make_pair(buf, size));
 
     } else if (bidx < MODEL_BATCH_N) {
-      size_t accSize = 0;
-      for (int i = 0; i < MODEL_BATCH_N; i++) {
-        size_t size = MODEL_BATCHES[i];
-        if (splitN > 0) { // vertical split
-          size /= splitN;
-        }
-        char* startBuf = buf + accSize;
-        sendFrom.push_back(std::make_pair(startBuf, size));
-        accSize += size;
-        if (splitN > 0) {accSize += (splitN - 1) * size;}
+      size_t size = MODEL_BATCHES[bidx];
+      if (splitN > 0) {  // vertical split
+        size /= splitN;
       }
+      sendFrom.push_back(std::make_pair(buf, size));
     } else {
       spdlog::error("unknown instruction");
       throw "error unknown instruction";
@@ -73,7 +68,6 @@ void runServer(int port) {
     std::thread handleThd(cliHandlerThd, cli, memBuff);
     cliThds.push_back(std::move(handleThd));
   }
-
 }
 
 int main(int argc, char* argv[]) {
@@ -82,5 +76,5 @@ int main(int argc, char* argv[]) {
     return -1;
   }
   int serverPort = std::stoi(argv[1]);
-
+  runServer(serverPort);
 }

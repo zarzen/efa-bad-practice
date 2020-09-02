@@ -1,8 +1,8 @@
+#include <sstream>
 #include <vector>
 #include "shard_util.hpp"
 #include "spdlog/spdlog.h"
 #include "tcp.h"
-#include <sstream>
 
 void waitClients(TcpServer& server,
                  int size,
@@ -14,7 +14,10 @@ void waitClients(TcpServer& server,
   }
 }
 
-void fullModelExp(int expID, std::string logPrefix, std::vector<std::shared_ptr<TcpAgent>>& clients, int repeat) {
+void fullModelExp(int expID,
+                  std::string logPrefix,
+                  std::vector<std::shared_ptr<TcpAgent>>& clients,
+                  int repeat) {
   for (int r = 0; r < repeat; r++) {
     // send instr
     for (int i = 0; i < clients.size(); i++) {
@@ -29,11 +32,14 @@ void fullModelExp(int expID, std::string logPrefix, std::vector<std::shared_ptr<
       totalTime += *(double*)recvBuf;
     }
     double avgTime = totalTime / clients.size();
-    spdlog::info(logPrefix, avgTime);
+    spdlog::info(logPrefix, avgTime*1000);
   }
 }
 
-void layerwiseExp(int expID, std::string logPrefix, std::vector<std::shared_ptr<TcpAgent>>& clients, int repeat) {
+void layerwiseExp(int expID,
+                  std::string logPrefix,
+                  std::vector<std::shared_ptr<TcpAgent>>& clients,
+                  int repeat) {
   for (int r = 0; r < repeat; r++) {
     // send
     int expID = 2;
@@ -47,14 +53,15 @@ void layerwiseExp(int expID, std::string logPrefix, std::vector<std::shared_ptr<
       layerCompletion[i] = new double[MODEL_BATCH_N];
     }
     size_t bufSize = MODEL_BATCH_N * sizeof(double);
-    char* recvBuf = new char[bufSize];
+    // char* recvBuf = new char[bufSize];
     for (int i = 0; i < clients.size(); ++i) {
-      clients[i]->tcpRecv(recvBuf, bufSize);
-      for (int j = 0; j < MODEL_BATCH_N; j++) {
-        layerCompletion[i][j] = *(double*)(recvBuf + j * sizeof(double));
-      }
+      clients[i]->tcpRecv((char*)layerCompletion[i], bufSize);
+      // clients[i]->tcpRecv(recvBuf, bufSize);
+      // for (int j = 0; j < MODEL_BATCH_N; j++) {
+      //   layerCompletion[i][j] = *(double*)(recvBuf + j * sizeof(double));
+      // }
     }
-    
+
     // compute avg layer completion time
     std::stringstream ss;
     for (int j = 0; j < MODEL_BATCH_N; j++) {
@@ -62,8 +69,9 @@ void layerwiseExp(int expID, std::string logPrefix, std::vector<std::shared_ptr<
       for (int i = 0; i < clients.size(); ++i) {
         t += layerCompletion[i][j];
       }
-      ss << t / clients.size();
-      if (j != MODEL_BATCH_N - 1) ss << ", ";
+      ss << t * 1000 / clients.size();
+      if (j != MODEL_BATCH_N - 1)
+        ss << ", ";
     }
     spdlog::info(logPrefix, ss.str());
   }

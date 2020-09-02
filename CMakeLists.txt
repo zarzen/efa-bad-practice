@@ -81,3 +81,6 @@ target_link_libraries(shard_ctl spdlog::spdlog pthread)
 
 add_executable(shard_server shard_serv.cpp helper_socket.cpp efa_ep.cpp thd_comm.cpp util.cpp tcp.cpp)
 target_link_libraries(shard_server spdlog::spdlog ${LIBFABRIC_LIBRARY} pthread)
+
+add_executable(shard_cli shard_cli.cpp helper_socket.cpp efa_ep.cpp thd_comm.cpp util.cpp tcp.cpp)
+target_link_libraries(shard_cli spdlog::spdlog ${LIBFABRIC_LIBRARY} pthread)
