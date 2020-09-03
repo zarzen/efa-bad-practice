@@ -189,6 +189,7 @@ int EFAEndpoint::syncRecv() {
 }
 
 EFAEndpoint::~EFAEndpoint() {
+  spdlog::debug("EFAEndpoint cleaning resources");
   fi_close((fid_t)ep);
   fi_close((fid_t)txcq);
   fi_close((fid_t)rxcq);

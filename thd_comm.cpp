@@ -22,7 +22,7 @@ void ThdCommunicator::setListenPort(int port) {
 void ThdCommunicator::randomName() {
   char name_buf[5] = {'\0'};
   for (int i = 0; i < 4; i++) {
-    int idx = i % RAND_STR.length();
+    int idx = rand() % RAND_STR.length();
     *(name_buf + i) = RAND_STR.at(idx);
   }
   this->name = "thd-comm-" + std::string(name_buf);

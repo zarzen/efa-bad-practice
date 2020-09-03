@@ -20,17 +20,17 @@ void initCommunicator(std::shared_ptr<TcpAgent> cli,
   comm.setPeer(dstIP, dstPort);
 }
 
-void cliHandlerThd(std::shared_ptr<TcpAgent> fromCli, char* buf) {
+void cliHandlerThd(std::shared_ptr<TcpAgent> fromCli, char* dataBuf) {
   trans::ThdCommunicator comm(COMM_NW);
   initCommunicator(fromCli, comm);
 
   // main loop
   while (true) {
     // recv instruction
-    char buf[8];  // two ints
-    fromCli->tcpRecv(buf, 8);
-    int bidx = *(int*)buf;
-    int splitN = *(int*)(buf + 4);
+    char cmdBuf[8];  // two ints
+    fromCli->tcpRecv(cmdBuf, 8);
+    int bidx = *(int*)cmdBuf;
+    int splitN = *(int*)(cmdBuf + 4);
 
     std::vector<std::pair<char*, size_t>> sendFrom;
     if (bidx < 0) {
@@ -39,17 +39,17 @@ void cliHandlerThd(std::shared_ptr<TcpAgent> fromCli, char* buf) {
       if (splitN > 0) {  // vertical split
         size /= splitN;
       }
-      sendFrom.push_back(std::make_pair(buf, size));
+      sendFrom.push_back(std::make_pair(dataBuf, size));
 
     } else if (bidx < MODEL_BATCH_N) {
       size_t size = MODEL_BATCHES[bidx];
       if (splitN > 0) {  // vertical split
         size /= splitN;
       }
-      sendFrom.push_back(std::make_pair(buf, size));
+      sendFrom.push_back(std::make_pair(dataBuf, size));
     } else {
-      spdlog::error("unknown instruction");
-      throw "error unknown instruction";
+      spdlog::warn("bidx larger than MODEL_BATCH_N {}, exiting", MODEL_BATCH_N);
+      return;
     }
 
     comm.asendBatch(sendFrom);
@@ -68,9 +68,16 @@ void runServer(int port) {
     std::thread handleThd(cliHandlerThd, cli, memBuff);
     cliThds.push_back(std::move(handleThd));
   }
+
+  for (int i = 0; i < cliThds.size(); i++) {
+    cliThds[i].join();
+  }
 }
 
 int main(int argc, char* argv[]) {
+  if (const char* env_p = std::getenv("DEBUG_THIS")) {
+    spdlog::set_level(spdlog::level::debug);
+  }
   if (argc < 2) {
     spdlog::error("require a port for listen");
     return -1;

@@ -94,6 +94,10 @@ void hybrid(std::vector<std::shared_ptr<TcpAgent>>& clients, int repeat) {
 }
 
 int main(int argc, char* argv[]) {
+  if (const char* env_p = std::getenv("DEBUG_THIS")) {
+    spdlog::set_level(spdlog::level::debug);
+  }
+  
   if (argc < 3) {
     spdlog::error("require port to listen and client num");
     return -1;
@@ -103,5 +107,21 @@ int main(int argc, char* argv[]) {
 
   TcpServer sockServ("0.0.0.0", port);
   std::vector<std::shared_ptr<TcpAgent>> clientPtrs;
+  spdlog::info("waiting for {} clients", cliN);
   waitClients(sockServ, cliN, clientPtrs);
+
+  spdlog::info("========per app exp========");
+  perApp(clientPtrs, 2);
+  spdlog::info("========vertical exp========");
+  verticalApp(clientPtrs, 2);
+  spdlog::info("========per layer exp========");
+  perLayer(clientPtrs, 2);
+  spdlog::info("========hybrid exp========");
+  hybrid(clientPtrs, 2);
+
+  // signal clients to exit
+  int exitS = 4;
+  for (auto conn: clientPtrs) {
+    conn->tcpSend((char*)&exitS, 4);
+  }
 }

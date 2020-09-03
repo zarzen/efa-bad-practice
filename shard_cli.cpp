@@ -13,8 +13,7 @@ using std::vector;
 shared_ptr<TcpClient> initCtl(char* ip, char* port) {
   string ipStr(ip);
   int portInt = std::stoi(port);
-  shared_ptr<TcpClient> toCtl(new TcpClient(ipStr, portInt));
-  return toCtl;
+  return shared_ptr<TcpClient>(new TcpClient(ipStr, portInt));
 }
 
 void setupCommunicator(vector<string>& serverIPs,
@@ -37,11 +36,12 @@ void initServerComm(char* argv[],
                     vector<string>& serverIPs,
                     vector<shared_ptr<TcpClient>>& socket2Servers) {
   int numServers = std::atoi(argv[3]);
+  spdlog::info("num server to connect {}", numServers);
 
   for (int i = 0; i < numServers; i++) {
-    string servAddr(argv[3 + i * 2]);
+    string servAddr(argv[4 + i * 2]);
     serverIPs.push_back(servAddr);
-    int servPort = std::atoi(argv[4 + i * 2]);
+    int servPort = std::atoi(argv[5 + i * 2]);
     shared_ptr<TcpClient> tcp(new TcpClient(servAddr, servPort));
     socket2Servers.push_back(tcp);
     shared_ptr<ThdCommunicator> comm(new ThdCommunicator(COMM_NW));
@@ -214,21 +214,28 @@ void hybridExp(char* buf,
 
 
 int main(int argc, char* argv[]) {
+  if (const char* env_p = std::getenv("DEBUG_THIS")) {
+    spdlog::set_level(spdlog::level::debug);
+  }
   if (argc < 4) {
     spdlog::error("require <ctl-ip> <ctl-port> <num-of-servers>");
   }
-  std::shared_ptr<TcpClient> toCtl = initCtl(argv[1], argv[2]);
+
+  shared_ptr<TcpClient> toCtl = initCtl(argv[1], argv[2]);
+  spdlog::info("connected to controller {}:{}", argv[1], argv[2]);
 
   vector<shared_ptr<ThdCommunicator>> comm2Servers;
   vector<string> serverIPs;
   vector<shared_ptr<TcpClient>> socket2Servers;
   initServerComm(argv, comm2Servers, serverIPs, socket2Servers);
+  spdlog::info("initialized communicator to servers");
 
   char* recvBuf = new char[10UL * 1024UL * 1024UL * 1024UL];
   char ctlInstrBuf[4] = {'\0'};
 
   // main loop
-  while (true) {
+  bool exit = false;
+  while (!exit) {
     // receive instruction from ctl
     toCtl->tcpRecv(ctlInstrBuf, 4);
     int instrCode = *(int*)ctlInstrBuf;
@@ -250,7 +257,16 @@ int main(int argc, char* argv[]) {
         hybridExp(recvBuf, toCtl, socket2Servers, comm2Servers);
         break;
       default:
+        exit = true;
+        spdlog::info("exiting");
         break;
     }
+  }
+
+  // signal servers to exit threads
+  for (auto conn: socket2Servers) {
+    char buf[8] = {'\0'};
+    *(int*)buf = MODEL_BATCH_N + 1;
+    conn->tcpSend(buf, 8);
   }
 }

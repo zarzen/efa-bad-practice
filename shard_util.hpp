@@ -13,7 +13,7 @@
 size_t MODEL_BATCHES[7] = {34177280UL, 34699264UL, 35749888UL, 35749888UL, 34437120UL, 35696640UL, 30261152UL};
 int MODEL_BATCH_N = 7;
 
-int COMM_NW = 4;
+int COMM_NW = 1;
 size_t COMM_SLICE = 512 * 1024;
 
 size_t totalSize(size_t model[], int size) {
