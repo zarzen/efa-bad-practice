@@ -70,7 +70,7 @@ void perAppExp(char* buf,
   comm2Servers[0]->sync();
   double dur = trans::time_now() - startTime;
   double bw = ((modelSize * 8) / dur) / 1e9;
-  spdlog::info("per app recv bw : {:f}, dur: {:f} ms", bw, dur * 1000);
+  spdlog::info("per app recv bw : {:f}Gbps, dur: {:f} ms", bw, dur * 1000);
 
   // send result to ctl
   toCtl->tcpSend((char*)&dur, sizeof(double));
@@ -107,7 +107,7 @@ void verticalExp(char* buf,
 
   double dur = trans::time_now() - startTime;
   double bw = ((modelSize * 8) / dur) / 1e9;
-  spdlog::info("vertical recv bw : {:f}, dur: {:f} ms", bw, dur * 1000);
+  spdlog::info("vertical recv bw : {:f}Gbps, dur: {:f} ms", bw, dur * 1000);
 
   // send result to ctl
   toCtl->tcpSend((char*)&dur, sizeof(double));
@@ -151,6 +151,12 @@ void perLayerExp(char* buf,
     // completed batch i
     completionCost[i] = trans::time_now() - startTime;
   }
+
+  // compute bw
+  size_t modelSize = totalSize(MODEL_BATCHES, MODEL_BATCH_N);
+  double dur = trans::time_now() - startTime;
+  double bw = ((modelSize * 8) / dur) / 1e9;
+  spdlog::info("perLayerExp recv bw : {:f}Gbps, dur: {:f} ms", bw, dur * 1000);
 
   // send to ctl
   toCtl->tcpSend((char*)completionCost, sizeof(double) * MODEL_BATCH_N);
@@ -205,6 +211,12 @@ void hybridExp(char* buf,
     completionCost[i] = trans::time_now() - startTime;
   }
 
+  // compute bw
+  size_t modelSize = totalSize(MODEL_BATCHES, MODEL_BATCH_N);
+  double dur = trans::time_now() - startTime;
+  double bw = ((modelSize * 8) / dur) / 1e9;
+  spdlog::info("hybridExp recv bw : {:f}Gbps, dur: {:f} ms", bw, dur * 1000);
+
   // send to ctl
   toCtl->tcpSend((char*)completionCost, sizeof(double) * MODEL_BATCH_N);
 
@@ -254,6 +266,7 @@ int main(int argc, char* argv[]) {
         break;
       case 3:
         // hybrid
+        spdlog::debug("recv hybrid exp instruction");
         hybridExp(recvBuf, toCtl, socket2Servers, comm2Servers);
         break;
       default:

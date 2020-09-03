@@ -42,7 +42,6 @@ void layerwiseExp(int expID,
                   int repeat) {
   for (int r = 0; r < repeat; r++) {
     // send
-    int expID = 2;
     for (int i = 0; i < clients.size(); i++) {
       clients[i]->tcpSend((char*)&expID, sizeof(int));
     }
@@ -97,7 +96,7 @@ int main(int argc, char* argv[]) {
   if (const char* env_p = std::getenv("DEBUG_THIS")) {
     spdlog::set_level(spdlog::level::debug);
   }
-  
+
   if (argc < 3) {
     spdlog::error("require port to listen and client num");
     return -1;
