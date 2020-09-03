@@ -97,12 +97,13 @@ int main(int argc, char* argv[]) {
     spdlog::set_level(spdlog::level::debug);
   }
 
-  if (argc < 3) {
-    spdlog::error("require port to listen and client num");
+  if (argc < 4) {
+    spdlog::error("require <listen-port>, <n-clients>, <repeat>");
     return -1;
   }
   int port = std::stoi(argv[1]);
   int cliN = std::stoi(argv[2]);
+  int repeatExp = std::stoi(argv[3]);
 
   TcpServer sockServ("0.0.0.0", port);
   std::vector<std::shared_ptr<TcpAgent>> clientPtrs;
@@ -110,13 +111,13 @@ int main(int argc, char* argv[]) {
   waitClients(sockServ, cliN, clientPtrs);
 
   spdlog::info("========per app exp========");
-  perApp(clientPtrs, 2);
+  perApp(clientPtrs, repeatExp);
   spdlog::info("========vertical exp========");
-  verticalApp(clientPtrs, 2);
+  verticalApp(clientPtrs, repeatExp);
   spdlog::info("========per layer exp========");
-  perLayer(clientPtrs, 2);
+  perLayer(clientPtrs, repeatExp);
   spdlog::info("========hybrid exp========");
-  hybrid(clientPtrs, 2);
+  hybrid(clientPtrs, repeatExp);
 
   // signal clients to exit
   int exitS = 4;
