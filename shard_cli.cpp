@@ -124,6 +124,7 @@ void perLayerExp(char* buf,
   }
 
   double startTime = trans::time_now();
+  double* completionCost = new double[MODEL_BATCH_N];
 
   // launch tasks
   char signalBuf[8];
@@ -137,18 +138,9 @@ void perLayerExp(char* buf,
     vector<pair<char*, size_t>> recvTo;
     recvTo.push_back(std::make_pair(buf, batchSize));
     comm2Servers[sidx]->arecvBatch(recvTo);
-  }
 
-  // sync each batch
-  // because EFA send-after-send option, it guarantees order
-  double* completionCost = new double[MODEL_BATCH_N];
-  for (int i = 0; i < MODEL_BATCH_N; ++i) {
-    int sidx = i % numServer;
-    while (comm2Servers[sidx]->getCntr() <= preCntrs[sidx]) {
-      std::this_thread::sleep_for(std::chrono::microseconds(50));
-    }
-    preCntrs[sidx] += 1;
-    // completed batch i
+    // sync batch task
+    comm2Servers[sidx]->sync();
     completionCost[i] = trans::time_now() - startTime;
   }
 
