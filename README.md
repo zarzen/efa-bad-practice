@@ -7,12 +7,15 @@ mkdir build && cd build && cmake .. && make
 
 ## run 
 ```
-# server
-./msg_serv 127.0.0.1 8888 1
+# shard experiment controller
+./shard_ctl <ctrl-port> <num-clients> <repeat-exp-n-times>
 
-# client
-./msg_cli 127.0.0.1 8888 1
+# server
+./shard_server <server-port>
+
+
+# shard client
+./shard_cli <ctrl-ip> <ctrl-port> <n-servers> <server-1-ip> <server-1-port> ...
 
 ```
-## issue
-the recv bandwidth only 2.5 Gbps
+
